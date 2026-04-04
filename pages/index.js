@@ -26,7 +26,8 @@ export default function TestZyro() {
   const [treeLoad, setTreeLoad] = useState(true)
   const [cbtOn, setCbtOn] = useState(false)
   const [Qs, setQs] = useState([])
-  const [ans, setAns] = useState([])
+  const [ans, setAns] = useState([])      // null | 'A'|'B'|'C'|'D'|number string
+  const [marked, setMarked] = useState([]) // bool[] — marked for review
   const [cur, setCur] = useState(0)
   const [secs, setSecs] = useState(0)
   const [done, setDone] = useState(false)
@@ -75,6 +76,7 @@ export default function TestZyro() {
     const blankAns = new Array(qs.length).fill(null)
     setQs(qs); setCfg(c)
     setAns(blankAns); cbtAns.current = blankAns
+    setMarked(new Array(qs.length).fill(false))
     setCur(0); setDone(false); setReviewing(false); setResult(null)
     setSecs(c.dur*60)
     if (isBITSAT(c.subject||'')) {
@@ -110,8 +112,20 @@ export default function TestZyro() {
     })
   }, [cur])
 
-  const skipQ = () => { setAnswer('skip'); if(cur<Qs.length-1) setCur(c=>c+1) }
-  const clearQ = () => setAnswer(null)
+  // Mark for Review & Next:
+  // - if answered: mark as purple (answered+marked), move next
+  // - if not answered: mark as red (skipped), move next
+  const markForReview = () => {
+    const hasAnswer = ans[cur] && ans[cur] !== 'skip'
+    setMarked(prev => { const m=[...prev]; m[cur]=true; return m })
+    if (!hasAnswer) setAnswer('skip')
+    if (cur < Qs.length-1) setCur(c=>c+1)
+  }
+
+  const clearQ = () => {
+    setAnswer(null)
+    setMarked(prev => { const m=[...prev]; m[cur]=false; return m })
+  }
 
   const doSubmit = useCallback((auto=false) => {
     if (!auto && !confirm('Submit test? This cannot be undone.')) return
@@ -179,7 +193,20 @@ export default function TestZyro() {
   const q = Qs[cur]
   const ua = ans[cur]
   const ak = (q?.ans||'').toUpperCase().trim()
-  const stats = { a:ans.filter(x=>x&&x!=='skip').length, s:ans.filter(x=>x==='skip').length, r:ans.filter(x=>!x).length }
+  // dot state helper
+  const getDotState = (i) => {
+    const a = ans[i]; const m = marked[i]
+    if (a && a !== 'skip' && m) return 'answered-marked'  // purple + green tick
+    if (a && a !== 'skip') return 'answered'               // green
+    if (a === 'skip' || m) return 'skipped'                // red
+    return 'untouched'                                     // grey
+  }
+  const stats = {
+    a: ans.filter((x,i) => x && x!=='skip' && !marked[i]).length,
+    am: ans.filter((x,i) => x && x!=='skip' && marked[i]).length,
+    s: ans.filter((x,i) => (x==='skip' || (marked[i] && !x))).length,
+    r: ans.filter((x,i) => !x && !marked[i]).length
+  }
   const optCls = (lbl) => {
     const sel = ua===lbl
     if (reviewing) return lbl===ak?'opt cor':sel?'opt wrg':'opt'
@@ -388,7 +415,7 @@ export default function TestZyro() {
               {!done&&!reviewing&&(
                 <div className="action-row">
                   <button className="btn-save-next" onClick={()=>setCur(c=>Math.min(Qs.length-1,c+1))}>Save &amp; Next</button>
-                  <button className="btn-skip" onClick={skipQ}>Mark for Review &amp; Next</button>
+                  <button className="btn-skip" onClick={markForReview}>Mark for Review &amp; Next</button>
                   <button className="btn-clear" onClick={clearQ}>Clear Response</button>
                 </div>
               )}
@@ -402,13 +429,14 @@ export default function TestZyro() {
               <div className="sb-title">Question Paper</div>
               <div className="sb-legend">
                 <div className="leg-item"><div className="leg-dot answered"/>Answered</div>
-                <div className="leg-item"><div className="leg-dot skipped"/>Marked</div>
-                <div className="leg-item"><div className="leg-dot untouched"/>Not Visited</div>
+                <div className="leg-item"><div className="leg-dot answered-marked"/>Ans+Marked</div>
+                <div className="leg-item"><div className="leg-dot skipped"/>Not Ans+Marked</div>
                 <div className="leg-item"><div className="leg-dot current"/>Current</div>
               </div>
               <div className="sb-stats-row">
                 <div className="sb-stat"><span className="sb-stat-n green">{stats.a}</span><span className="sb-stat-l">Answered</span></div>
-                <div className="sb-stat"><span className="sb-stat-n orange">{stats.s}</span><span className="sb-stat-l">Marked</span></div>
+                <div className="sb-stat"><span className="sb-stat-n purple">{stats.am}</span><span className="sb-stat-l">Ans+Marked</span></div>
+                <div className="sb-stat"><span className="sb-stat-n red">{stats.s}</span><span className="sb-stat-l">Marked</span></div>
                 <div className="sb-stat"><span className="sb-stat-n gray">{stats.r}</span><span className="sb-stat-l">Remaining</span></div>
               </div>
 
@@ -430,11 +458,16 @@ export default function TestZyro() {
                         {isActiveSection && (
                           <div className="qgrid">
                             {indices.map(i=>{
-                              const a2=ans[i]; let cls='qdot'
-                              if(i===cur) cls+=' current'
-                              else if(a2&&a2!=='skip') cls+=' answered'
-                              else if(a2==='skip') cls+=' skipped'
-                              return <div key={i} className={cls} onClick={()=>{setCur(i);setActiveNavSubj(s)}}>{i+1}</div>
+                              const state = getDotState(i)
+                              const isCur = i===cur
+                              const cls = `qdot${isCur?' current':' '+state}`
+                              const isAnsMarked = state==='answered-marked'
+                              return (
+                                <div key={i} className={cls} onClick={()=>{setCur(i);setActiveNavSubj(s)}} style={{position:'relative'}}>
+                                  {i+1}
+                                  {isAnsMarked && <span className="dot-tick">✓</span>}
+                                </div>
+                              )
                             })}
                           </div>
                         )}
@@ -445,11 +478,16 @@ export default function TestZyro() {
               ) : (
                 <div className="qgrid" style={{padding:'8px'}}>
                   {Qs.map((_,i)=>{
-                    const a2=ans[i]; let cls='qdot'
-                    if(i===cur) cls+=' current'
-                    else if(a2&&a2!=='skip') cls+=' answered'
-                    else if(a2==='skip') cls+=' skipped'
-                    return <div key={i} className={cls} onClick={()=>setCur(i)}>{i+1}</div>
+                    const state = getDotState(i)
+                    const isCur = i===cur
+                    const cls = `qdot${isCur?' current':' '+state}`
+                    const isAnsMarked = state==='answered-marked'
+                    return (
+                      <div key={i} className={cls} onClick={()=>setCur(i)} style={{position:'relative'}}>
+                        {i+1}
+                        {isAnsMarked && <span className="dot-tick">✓</span>}
+                      </div>
+                    )
                   })}
                 </div>
               )}
@@ -668,12 +706,16 @@ body{background:#f5f5f5;color:#212121;font-family:'Roboto',sans-serif;min-height
 .sb-legend{padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;border-bottom:1px solid #e0e0e0;background:white}
 .leg-item{display:flex;align-items:center;gap:4px;font-size:.62rem;color:#555}
 .leg-dot{width:14px;height:14px;border-radius:3px;flex-shrink:0}
-.leg-dot.answered{background:#2e7d32}.leg-dot.skipped{background:#e65100}
-.leg-dot.untouched{background:#e0e0e0;border:1px solid #ccc}.leg-dot.current{background:#1a237e}
+.leg-dot.answered{background:#2e7d32}
+.leg-dot.answered-marked{background:#7b1fa2}
+.leg-dot.skipped{background:#c62828}
+.leg-dot.untouched{background:#e0e0e0;border:1px solid #ccc}
+.leg-dot.current{background:#1a237e}
 .sb-stats-row{display:flex;padding:8px 12px;gap:8px;border-bottom:1px solid #e0e0e0;background:white}
 .sb-stat{display:flex;flex-direction:column;align-items:center;flex:1}
 .sb-stat-n{font-family:'Roboto Mono',monospace;font-size:1.1rem;font-weight:700}
 .sb-stat-n.green{color:#2e7d32}.sb-stat-n.orange{color:#e65100}.sb-stat-n.gray{color:#888}
+.sb-stat-n.red{color:#c62828}.sb-stat-n.purple{color:#7b1fa2}
 .sb-stat-l{font-size:.58rem;color:#888;text-transform:uppercase;font-family:'Roboto Mono',monospace}
 .sb-sections{flex:1;overflow-y:auto}
 .sb-section{border-bottom:1px solid #e0e0e0}
@@ -682,11 +724,14 @@ body{background:#f5f5f5;color:#212121;font-family:'Roboto',sans-serif;min-height
 .sb-section-name{flex:1;font-weight:600}
 .sb-section-count{font-family:'Roboto Mono',monospace;font-size:.62rem;color:#666}
 .qgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;padding:8px}
-.qdot{height:28px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:'Roboto Mono',monospace;font-size:.6rem;font-weight:700;cursor:pointer;background:#e0e0e0;color:#555;border:1.5px solid transparent;transition:all .1s}
+.qdot{height:28px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:'Roboto Mono',monospace;font-size:.6rem;font-weight:700;cursor:pointer;background:#e0e0e0;color:#555;border:1.5px solid transparent;transition:all .1s;position:relative}
 .qdot:hover{transform:scale(1.08)}
 .qdot.current{border-color:#1a237e;background:#e8eaf6;color:#1a237e;border-width:2px}
 .qdot.answered{background:#2e7d32;color:white}
-.qdot.skipped{background:#e65100;color:white}
+.qdot.skipped{background:#c62828;color:white}
+.qdot.untouched{background:#e0e0e0;color:#555}
+.qdot.answered-marked{background:#7b1fa2;color:white}
+.dot-tick{position:absolute;top:-5px;right:-4px;font-size:.5rem;background:#2e7d32;color:white;border-radius:50%;width:10px;height:10px;display:flex;align-items:center;justify-content:center;line-height:1;border:1px solid white;font-style:normal}
 .sb-submit-area{padding:12px;border-top:1px solid #e0e0e0;background:white;margin-top:auto}
 .sb-submit-btn{width:100%;padding:10px;background:#1a237e;color:white;border:none;border-radius:6px;font-family:'Roboto',sans-serif;font-weight:700;font-size:.82rem;cursor:pointer}
 .sb-submit-btn:hover{background:#283593}
