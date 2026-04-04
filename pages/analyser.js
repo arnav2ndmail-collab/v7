@@ -1,12 +1,26 @@
 import { useState, useRef } from 'react'
 import Head from 'next/head'
 
+const SUBJ_ORDER = ['Physics','Chemistry','Maths','English & LR']
+const SUBJ_COLORS = {
+  'Physics':      { accent:'#1a237e', light:'#e8eaf6', label:'PHY' },
+  'Chemistry':    { accent:'#1b5e20', light:'#e8f5e9', label:'CHEM' },
+  'Maths':        { accent:'#b71c1c', light:'#ffebee', label:'MATH' },
+  'English & LR': { accent:'#4a148c', light:'#f3e5f5', label:'ENG' },
+}
+const getSubjStyle = s => SUBJ_COLORS[s] || { accent:'#37474f', light:'#eceff1', label:'Q' }
+
+const RES_COLOR = { correct:'#2e7d32', wrong:'#c62828', skipped:'#e65100', unattempted:'#9e9e9e' }
+const RES_BG    = { correct:'#e8f5e9', wrong:'#ffebee', skipped:'#fff3e0', unattempted:'#f5f5f5' }
+const RES_LABEL = { correct:'✓ Correct', wrong:'✗ Wrong', skipped:'↩ Skipped', unattempted:'— Not Attempted' }
+
 export default function Analyser() {
-  const [data, setData] = useState(null)
-  const [err, setErr] = useState('')
-  const [drag, setDrag] = useState(false)
-  const [curQ, setCurQ] = useState(0)
-  const [filterMode, setFilterMode] = useState('all') // all | correct | wrong | skipped | unattempted
+  const [data, setData]         = useState(null)
+  const [err, setErr]           = useState('')
+  const [drag, setDrag]         = useState(false)
+  const [activeSubj, setActiveSubj] = useState(null)   // null = overview
+  const [curQ, setCurQ]         = useState(0)
+  const [filter, setFilter]     = useState('all')       // all|correct|wrong|skipped|unattempted
   const fileRef = useRef()
 
   const loadFile = async (file) => {
@@ -14,19 +28,25 @@ export default function Analyser() {
     try {
       const text = await file.text()
       const d = JSON.parse(text)
-      if (!d.questions || !Array.isArray(d.questions)) throw new Error('Invalid result file — no questions found')
-      setData(d); setCurQ(0); setFilterMode('all')
-    } catch(e) {
-      setErr('❌ ' + e.message)
-    }
+      if (!d.questions || !Array.isArray(d.questions)) throw new Error('Invalid result file — no questions array found')
+      // ensure every question has a result field
+      d.questions = d.questions.map(q => ({
+        ...q,
+        result: q.result || (!q.yourAnswer ? 'unattempted' : q.yourAnswer==='skip'?'skipped':
+          (String(q.correctAnswer||'').toUpperCase().trim()===String(q.yourAnswer||'').toUpperCase().trim())?'correct':'wrong')
+      }))
+      setData(d)
+      setCurQ(0)
+      setFilter('all')
+      // default to first subject
+      const subjects = SUBJ_ORDER.filter(s => d.questions.some(q => q.subject===s))
+      setActiveSubj(subjects[0] || null)
+    } catch(e) { setErr('❌ ' + e.message) }
   }
 
-  const handleDrop = (e) => {
-    e.preventDefault(); setDrag(false)
-    const f = e.dataTransfer.files[0]
-    if (f) loadFile(f)
-  }
+  const handleDrop = e => { e.preventDefault(); setDrag(false); const f=e.dataTransfer.files[0]; if(f) loadFile(f) }
 
+  // ── Upload screen ──────────────────────────────────────────────────────────
   if (!data) return (
     <>
       <Head>
@@ -44,232 +64,265 @@ export default function Analyser() {
           <span className="nb active">📊 Analyser</span>
         </nav>
       </header>
-      <div className="wrap narrow anim">
-        <div className="page-hero">
-          <h2>📊 Test Analyser</h2>
-          <p>Upload the output file downloaded after submitting a test to see detailed analysis</p>
-        </div>
-        <div
-          className={`up-zone${drag?' drag':''}`}
-          onDragOver={e=>{e.preventDefault();setDrag(true)}}
-          onDragLeave={()=>setDrag(false)}
-          onDrop={handleDrop}
-          onClick={()=>fileRef.current.click()}
-        >
-          <div className="up-icon">📥</div>
-          <div className="up-title">Drop result file here</div>
-          <div className="up-sub">The .json file downloaded after submitting a test</div>
-          <div className="btn-primary" style={{display:'inline-block',padding:'9px 24px',cursor:'pointer'}}>Choose File</div>
-          <input ref={fileRef} type="file" accept=".json" style={{display:'none'}} onChange={e=>{if(e.target.files[0])loadFile(e.target.files[0])}}/>
-        </div>
-        {err && <div className="err-box">{err}</div>}
-        <div className="info-card" style={{marginTop:18}}>
-          <div className="info-card-title">How to get the output file?</div>
-          <div style={{fontSize:'.82rem',color:'#555',lineHeight:2}}>
-            1. Complete a test on TestZyro<br/>
-            2. On the result screen, click <strong>📥 Download Output File</strong><br/>
-            3. Come back here and upload that file<br/>
-            4. See full question-by-question analysis ✅
+      <div className="upload-page anim">
+        <div className="upload-card">
+          <div className="upload-icon">📊</div>
+          <h2>Test Analyser</h2>
+          <p>Upload the output file downloaded after submitting a test</p>
+          <div
+            className={`up-zone${drag?' drag':''}`}
+            onDragOver={e=>{e.preventDefault();setDrag(true)}}
+            onDragLeave={()=>setDrag(false)}
+            onDrop={handleDrop}
+            onClick={()=>fileRef.current.click()}
+          >
+            <div style={{fontSize:'2rem',marginBottom:8}}>📥</div>
+            <div style={{fontWeight:600,marginBottom:4}}>Drop result .json file here</div>
+            <div style={{fontSize:'.78rem',color:'#888',marginBottom:14}}>or click to browse</div>
+            <div className="btn-upload">Choose File</div>
+            <input ref={fileRef} type="file" accept=".json" style={{display:'none'}} onChange={e=>{if(e.target.files[0])loadFile(e.target.files[0])}}/>
+          </div>
+          {err && <div className="err-box">{err}</div>}
+          <div className="how-to">
+            <b>How to get the output file:</b><br/>
+            Complete a test → click <b>📥 Download Output File</b> on result screen → upload here
           </div>
         </div>
       </div>
     </>
   )
 
-  // ── Analysis view ──────────────────────────────────────────────────────────
-  const qs = data.questions || []
-  const filteredQs = qs.filter(q => {
-    if (filterMode === 'all') return true
-    return q.result === filterMode
+  // ── Data derived ───────────────────────────────────────────────────────────
+  const allQs    = data.questions
+  const subjects = SUBJ_ORDER.filter(s => allQs.some(q => q.subject===s))
+  if (subjects.length===0) subjects.push('All')
+
+  // per-subject stats
+  const subjStats = {}
+  subjects.forEach(s => {
+    const qs = allQs.filter(q => q.subject===s || s==='All')
+    subjStats[s] = {
+      total: qs.length,
+      correct: qs.filter(q=>q.result==='correct').length,
+      wrong:   qs.filter(q=>q.result==='wrong').length,
+      skipped: qs.filter(q=>q.result==='skipped').length,
+      unattempted: qs.filter(q=>q.result==='unattempted').length,
+      score: qs.filter(q=>q.result==='correct').length*(data.marksCorrect||3) - qs.filter(q=>q.result==='wrong').length*(data.marksWrong||1)
+    }
   })
 
-  const cur = filteredQs[curQ]
-  const subjectList = [...new Set(qs.map(q => q.subject).filter(Boolean))]
+  // current subject's questions filtered
+  const subjQs = activeSubj
+    ? allQs.filter(q => q.subject===activeSubj)
+    : allQs
 
-  // Per-subject stats
-  const subjStats = data.subjStats || {}
-  // Also compute from questions if not in file
-  if (!Object.keys(subjStats).length) {
-    qs.forEach(q => {
-      const s = q.subject || 'Other'
-      if (!subjStats[s]) subjStats[s] = { cor:0, wrg:0, skp:0, un:0 }
-      if (q.result === 'correct') subjStats[s].cor++
-      else if (q.result === 'wrong') subjStats[s].wrg++
-      else if (q.result === 'skipped') subjStats[s].skp++
-      else subjStats[s].un++
-    })
-  }
+  const filteredQs = subjQs.filter(q => filter==='all' || q.result===filter)
+  const curQuestion = filteredQs[curQ] || null
 
-  const SUBJ_COLORS = {
-    'Physics':      '#1a237e',
-    'Chemistry':    '#1b5e20',
-    'Maths':        '#b71c1c',
-    'English & LR': '#4a148c',
-  }
-  const getSubjColor = (s) => SUBJ_COLORS[s] || '#37474f'
+  const totalAttempted = (data.correct||0)+(data.wrong||0)
+  const accuracy = totalAttempted ? Math.round((data.correct||0)/totalAttempted*100) : 0
 
-  const resultColor = { correct:'#2e7d32', wrong:'#c62828', skipped:'#e65100', unattempted:'#888' }
-  const resultLabel = { correct:'✓ Correct', wrong:'✗ Wrong', skipped:'↩ Marked/Skipped', unattempted:'— Not Attempted' }
-  const resultBg    = { correct:'#e8f5e9', wrong:'#ffebee', skipped:'#fff3e0', unattempted:'#f5f5f5' }
-
-  const totalAttempted = data.correct + data.wrong
-  const accuracy = totalAttempted ? Math.round(data.correct / totalAttempted * 100) : 0
-
+  // ── Main analyser layout ───────────────────────────────────────────────────
   return (
     <>
       <Head>
-        <title>TestZyro — Analyser: {data.testTitle}</title>
+        <title>TestZyro Analyser — {data.testTitle}</title>
         <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet"/>
       </Head>
       <style>{CSS}</style>
 
+      {/* Header */}
       <header className="hdr">
         <div className="logo" onClick={()=>window.location.href='/'}>
           <div className="logo-mark">TZ</div>
           <div className="logo-txt">Test<span>Zyro</span></div>
         </div>
-        <nav className="nav">
-          <a href="/" className="nb">📚 Library</a>
-          <a href="/analyser" className="nb active">📊 Analyser</a>
-        </nav>
-        <button className="btn-sm" onClick={()=>setData(null)}>↩ Upload New</button>
+        <div className="hdr-title">{data.testTitle}</div>
+        <div className="hdr-right">
+          <button className="btn-sm" onClick={()=>setData(null)}>↩ New File</button>
+        </div>
       </header>
 
-      <div className="analyser-wrap anim">
-        {/* ── Score Header ── */}
-        <div className="score-header">
-          <div className="score-header-left">
-            <div className="score-test-name">{data.testTitle}</div>
-            <div className="score-meta">
-              {data.subject && <span className="score-tag" style={{background:'#e8eaf6',color:'#1a237e'}}>{data.subject}</span>}
-              <span className="score-tag">{new Date(data.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</span>
-              <span className="score-tag">{Math.floor((data.duration||0)/60)}m {(data.duration||0)%60}s</span>
+      {/* Score banner */}
+      <div className="score-banner">
+        <div className="score-banner-inner">
+          <div className="score-main">
+            <div className="score-label">Total Score</div>
+            <div className="score-value" style={{color:data.score>=0?'#1b5e20':'#c62828'}}>
+              {data.score}<span className="score-max">/{data.maxScore}</span>
             </div>
           </div>
-          <div className="score-big">
-            <div className="score-num" style={{color: data.score>=0?'#1b5e20':'#c62828'}}>{data.score}</div>
-            <div className="score-denom">/{data.maxScore}</div>
+          <div className="score-stats">
+            {[
+              ['✓ Correct',   data.correct||0,     '#2e7d32','#e8f5e9'],
+              ['✗ Wrong',     data.wrong||0,        '#c62828','#ffebee'],
+              ['↩ Skipped',   data.skipped||0,      '#e65100','#fff3e0'],
+              ['— Not Att.',  data.unattempted||0,  '#888',   '#f5f5f5'],
+              ['🎯 Accuracy', accuracy+'%',          '#1565c0','#e3f2fd'],
+              ['⏱ Time',      Math.floor((data.duration||0)/60)+'m', '#4a148c','#f3e5f5'],
+            ].map(([l,v,c,bg])=>(
+              <div key={l} className="score-stat" style={{background:bg}}>
+                <div className="score-stat-val" style={{color:c}}>{v}</div>
+                <div className="score-stat-lbl">{l}</div>
+              </div>
+            ))}
           </div>
         </div>
+      </div>
 
-        {/* ── Summary Cards ── */}
-        <div className="summary-grid">
-          {[
-            ['✓ Correct',   data.correct,     '#e8f5e9','#2e7d32','correct'],
-            ['✗ Wrong',     data.wrong,       '#ffebee','#c62828','wrong'],
-            ['↩ Skipped',   data.skipped,     '#fff3e0','#e65100','skipped'],
-            ['— Unattempted',data.unattempted,'#f5f5f5','#888',   'unattempted'],
-            ['🎯 Accuracy', accuracy+'%',     '#e3f2fd','#1565c0', null],
-            ['⏱ Time',      `${Math.floor((data.duration||0)/60)}m`,'#f3e5f5','#6a1b9a', null],
-          ].map(([lbl,val,bg,color,mode])=>(
-            <div key={lbl} className={`sum-card${filterMode===mode?' active':''}`}
-              style={{background:bg,borderColor:color+'44',cursor:mode?'pointer':'default'}}
-              onClick={()=>{if(mode){setFilterMode(p=>p===mode?'all':mode);setCurQ(0)}}}>
-              <div className="sum-val" style={{color}}>{val}</div>
-              <div className="sum-lbl">{lbl}</div>
-            </div>
-          ))}
+      {/* Subject breakdown table */}
+      <div className="breakdown-wrap">
+        <div className="breakdown-title">Test Breakdown</div>
+        <div className="breakdown-table">
+          <div className="bt-head">
+            <div className="bt-subj">Subject</div>
+            <div className="bt-col">Score</div>
+            <div className="bt-col">Correct</div>
+            <div className="bt-col">Wrong</div>
+            <div className="bt-col">Not Att.</div>
+          </div>
+          {/* Overall row */}
+          {(() => {
+            const tot = allQs.length
+            const cor = allQs.filter(q=>q.result==='correct').length
+            const wrg = allQs.filter(q=>q.result==='wrong').length
+            const un  = allQs.filter(q=>q.result==='unattempted'||q.result==='skipped').length
+            return (
+              <div className="bt-row overall">
+                <div className="bt-subj"><strong>Overall</strong></div>
+                <div className="bt-col"><strong style={{color:data.score>=0?'#1b5e20':'#c62828'}}>{data.score}</strong><span className="bt-denom">/{data.maxScore}</span></div>
+                <div className="bt-col"><span style={{color:'#2e7d32',fontWeight:700}}>{cor}</span><span className="bt-denom">/{tot}</span></div>
+                <div className="bt-col"><span style={{color:'#c62828',fontWeight:700}}>{wrg}</span><span className="bt-denom">/{tot}</span></div>
+                <div className="bt-col"><span style={{color:'#888',fontWeight:700}}>{un}</span><span className="bt-denom">/{tot}</span></div>
+              </div>
+            )
+          })()}
+          {subjects.map(s => {
+            const st = subjStats[s]; const sc = getSubjStyle(s)
+            return (
+              <div key={s} className={`bt-row${activeSubj===s?' sel':''}`} onClick={()=>{setActiveSubj(s);setCurQ(0);setFilter('all')}}>
+                <div className="bt-subj">
+                  <span className="bt-subj-dot" style={{background:sc.accent}}/>
+                  {s}
+                </div>
+                <div className="bt-col"><span style={{color:st.score>=0?'#1b5e20':'#c62828',fontWeight:700}}>{st.score>=0?'+':''}{st.score}</span></div>
+                <div className="bt-col"><span style={{color:'#2e7d32',fontWeight:700}}>{st.correct}</span><span className="bt-denom">/{st.total}</span></div>
+                <div className="bt-col"><span style={{color:'#c62828',fontWeight:700}}>{st.wrong}</span><span className="bt-denom">/{st.total}</span></div>
+                <div className="bt-col"><span style={{color:'#888',fontWeight:700}}>{st.unattempted+st.skipped}</span><span className="bt-denom">/{st.total}</span></div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Q&A Review section */}
+      <div className="review-wrap">
+        <div className="review-title">
+          QUESTIONS
+          <span className="review-count">{filteredQs.length}/{subjQs.length}</span>
         </div>
 
-        {/* ── Subject Breakdown ── */}
-        {Object.keys(subjStats).length > 1 && (
-          <div className="subj-breakdown">
-            <div className="section-title">Subject-wise Breakdown</div>
-            <div className="subj-grid">
-              {Object.entries(subjStats).map(([s,st])=>{
-                const color = getSubjColor(s)
-                const tot = st.cor+st.wrg+(st.skp||0)+(st.un||0)
-                const pct = tot ? Math.round(st.cor/tot*100) : 0
-                const score = st.cor*(data.marksCorrect||3) - st.wrg*(data.marksWrong||1)
+        {/* Subject tabs */}
+        <div className="subj-tabs-row">
+          {subjects.map(s => {
+            const sc = getSubjStyle(s)
+            const isActive = activeSubj===s
+            return (
+              <button key={s} className={`subj-tab${isActive?' active':''}`}
+                style={isActive?{background:sc.accent,color:'white',borderColor:sc.accent}:{borderColor:sc.accent+'44',color:sc.accent}}
+                onClick={()=>{setActiveSubj(s);setCurQ(0);setFilter('all')}}>
+                {sc.label} · {subjStats[s]?.total||0}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="review-layout">
+          {/* Left: navigator */}
+          <div className="rev-nav">
+            {/* Filter row */}
+            <div className="filter-row">
+              {[
+                ['all','All', '#555'],
+                ['correct','✓', '#2e7d32'],
+                ['wrong','✗', '#c62828'],
+                ['skipped','↩', '#e65100'],
+                ['unattempted','—', '#888'],
+              ].map(([m,l,c])=>(
+                <button key={m}
+                  className={`filter-btn${filter===m?' on':''}`}
+                  style={filter===m?{background:c,color:'white',borderColor:c}:{color:c}}
+                  onClick={()=>{setFilter(m);setCurQ(0)}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+
+            {/* Dot grid */}
+            <div className="dot-grid">
+              {filteredQs.map((q,i) => {
+                const bg = i===curQ?'#1a237e':RES_COLOR[q.result]||'#9e9e9e'
                 return (
-                  <div key={s} className="subj-card" style={{borderLeft:`4px solid ${color}`}}>
-                    <div className="subj-card-name" style={{color}}>{s}</div>
-                    <div className="subj-card-score">{score > 0 ? '+' : ''}{score} marks</div>
-                    <div className="subj-bar-wrap">
-                      <div className="subj-bar" style={{width:pct+'%',background:color}}/>
-                    </div>
-                    <div className="subj-card-stats">
-                      <span style={{color:'#2e7d32'}}>✓{st.cor}</span>
-                      <span style={{color:'#c62828'}}>✗{st.wrg}</span>
-                      <span style={{color:'#e65100'}}>↩{st.skp||0}</span>
-                      <span style={{color:'#888'}}>—{st.un||0}</span>
-                      <span style={{color:color,fontWeight:700}}>{pct}%</span>
-                    </div>
+                  <div key={i} className={`q-dot${i===curQ?' cur':''}`}
+                    style={{background:bg, outline:i===curQ?'2.5px solid #1a237e':''}}
+                    onClick={()=>setCurQ(i)}>
+                    {q.qnum||(subjQs.indexOf(q)+1)}
                   </div>
                 )
               })}
-            </div>
-          </div>
-        )}
-
-        {/* ── Question Review ── */}
-        <div className="review-layout">
-          {/* Left: Question Navigator */}
-          <div className="review-nav">
-            <div className="review-nav-title">
-              Questions
-              <span className="review-nav-count">{filteredQs.length}/{qs.length}</span>
+              {filteredQs.length===0 && <div style={{color:'#aaa',fontSize:'.75rem',padding:'10px 0',gridColumn:'1/-1'}}>No questions</div>}
             </div>
 
-            {/* Filter buttons */}
-            <div className="filter-row">
-              {[['all','All'],['correct','✓'],['wrong','✗'],['skipped','↩'],['unattempted','—']].map(([m,l])=>(
-                <button key={m} className={`filter-btn${filterMode===m?' on':''}`}
-                  style={filterMode===m?{background:resultColor[m]||'#1a237e',color:'white',borderColor:resultColor[m]||'#1a237e'}:{}}
-                  onClick={()=>{setFilterMode(m);setCurQ(0)}}>{l}</button>
-              ))}
-            </div>
-
-            {/* Question dots */}
-            <div className="nav-dots">
-              {filteredQs.map((q2,i)=>(
-                <div key={i}
-                  className={`nav-dot${i===curQ?' cur':''}`}
-                  style={{background: i===curQ?'#1a237e':resultColor[q2.result]||'#888',color:'white'}}
-                  onClick={()=>setCurQ(i)}>
-                  {q2.qnum||qs.indexOf(q2)+1}
-                </div>
+            {/* Legend */}
+            <div className="legend">
+              {[['#2e7d32','Correct'],['#c62828','Wrong'],['#e65100','Skipped'],['#9e9e9e','Not Att.']].map(([c,l])=>(
+                <div key={l} className="leg-item"><div className="leg-dot" style={{background:c}}/>{l}</div>
               ))}
             </div>
           </div>
 
-          {/* Right: Question Detail */}
-          <div className="review-detail">
-            {!cur ? (
-              <div className="empty-state"><span>👆</span><p>Select a question to review</p></div>
+          {/* Right: question detail */}
+          <div className="rev-detail">
+            {!curQuestion ? (
+              <div className="empty-q">Select a question from the left</div>
             ) : (
               <>
-                <div className="detail-header">
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                    <span className="detail-qnum">Q {cur.qnum || qs.indexOf(cur)+1}</span>
-                    {cur.subject && <span className="detail-subj" style={{background:getSubjColor(cur.subject)+'18',color:getSubjColor(cur.subject),border:`1px solid ${getSubjColor(cur.subject)}30`}}>{cur.subject}</span>}
-                    <span className="detail-type">{cur.type==='INTEGER'?'Integer':'MCQ'}</span>
+                {/* Q header */}
+                <div className="q-header">
+                  <div className="q-header-left">
+                    <span className="q-num-badge">Q {curQuestion.qnum || (subjQs.indexOf(curQuestion)+1)}</span>
+                    {curQuestion.subject && (
+                      <span className="q-subj-badge" style={{background:getSubjStyle(curQuestion.subject).light, color:getSubjStyle(curQuestion.subject).accent}}>
+                        {curQuestion.subject}
+                      </span>
+                    )}
+                    <span className="q-type-badge">{curQuestion.type==='INTEGER'?'Integer':'MCQ'}</span>
                   </div>
-                  <div className="detail-result-badge" style={{background:resultBg[cur.result],color:resultColor[cur.result],border:`1px solid ${resultColor[cur.result]}44`}}>
-                    {resultLabel[cur.result]}
+                  <div className="q-result-badge" style={{background:RES_BG[curQuestion.result], color:RES_COLOR[curQuestion.result]}}>
+                    {RES_LABEL[curQuestion.result]}
                   </div>
                 </div>
 
                 {/* Question text */}
-                <div className="detail-qtext" dangerouslySetInnerHTML={{__html:(cur.text||'').replace(/\n/g,'<br/>')}}/>
+                <div className="q-text" dangerouslySetInnerHTML={{__html:(curQuestion.text||'Q'+curQuestion.qnum||'').replace(/\n/g,'<br/>')}}/>
 
-                {/* Options */}
-                {cur.type === 'MCQ' && cur.opts && (
-                  <div className="detail-opts">
-                    {['A','B','C','D'].map((lbl,i)=>{
-                      const isCorrect = lbl === (cur.correctAnswer||'').toUpperCase()
-                      const isYours   = lbl === (cur.yourAnswer||'').toUpperCase()
-                      let cls = 'detail-opt'
+                {/* MCQ Options */}
+                {curQuestion.type==='MCQ' && curQuestion.opts && (
+                  <div className="q-opts">
+                    {['A','B','C','D'].map((lbl,i) => {
+                      const isCorrect = lbl===(curQuestion.correctAnswer||'').toUpperCase().trim()
+                      const isYours   = lbl===(curQuestion.yourAnswer||'').toUpperCase().trim()
+                      let cls = 'q-opt'
                       if (isCorrect) cls += ' correct'
-                      else if (isYours && !isCorrect) cls += ' wrong'
+                      else if (isYours) cls += ' wrong'
                       return (
                         <div key={lbl} className={cls}>
-                          <span className="detail-opt-lbl">{lbl}</span>
-                          <span className="detail-opt-text">{cur.opts[i]}</span>
-                          <span className="detail-opt-tag">
-                            {isCorrect && <span className="tag-correct">✓ Correct</span>}
-                            {isYours && !isCorrect && <span className="tag-wrong">✗ Your answer</span>}
-                            {isYours && isCorrect && <span className="tag-correct">✓ Your answer</span>}
+                          <span className="q-opt-lbl">{lbl}</span>
+                          <span className="q-opt-text">{curQuestion.opts[i]||`Option ${lbl}`}</span>
+                          <span className="q-opt-tags">
+                            {isCorrect && isYours && <span className="tag green">✓ Your answer</span>}
+                            {isCorrect && !isYours && <span className="tag green">✓ Correct</span>}
+                            {!isCorrect && isYours && <span className="tag red">✗ Your answer</span>}
                           </span>
                         </div>
                       )
@@ -278,26 +331,26 @@ export default function Analyser() {
                 )}
 
                 {/* Integer answer */}
-                {cur.type === 'INTEGER' && (
-                  <div className="int-answer-box">
-                    <div className="int-answer-row">
-                      <span className="int-label">Your answer:</span>
-                      <span className="int-val" style={{color: cur.result==='correct'?'#2e7d32':'#c62828'}}>
-                        {cur.yourAnswer || '—'}
+                {curQuestion.type==='INTEGER' && (
+                  <div className="int-box">
+                    <div className="int-row">
+                      <span className="int-lbl">Your answer:</span>
+                      <span className="int-val" style={{color:curQuestion.result==='correct'?'#2e7d32':'#c62828'}}>
+                        {curQuestion.yourAnswer||'—'}
                       </span>
                     </div>
-                    <div className="int-answer-row">
-                      <span className="int-label">Correct answer:</span>
-                      <span className="int-val" style={{color:'#2e7d32'}}>{cur.correctAnswer}</span>
+                    <div className="int-row">
+                      <span className="int-lbl">Correct answer:</span>
+                      <span className="int-val" style={{color:'#2e7d32'}}>{curQuestion.correctAnswer}</span>
                     </div>
                   </div>
                 )}
 
-                {/* Navigation */}
-                <div className="detail-nav">
-                  <button className="btn-prev" disabled={curQ===0} onClick={()=>setCurQ(c=>c-1)}>← Prev</button>
-                  <span style={{fontSize:'.78rem',color:'#888',fontFamily:'Roboto Mono,monospace'}}>{curQ+1} / {filteredQs.length}</span>
-                  <button className="btn-next" disabled={curQ===filteredQs.length-1} onClick={()=>setCurQ(c=>c+1)}>Next →</button>
+                {/* Prev/Next */}
+                <div className="q-nav">
+                  <button className="nav-btn" disabled={curQ===0} onClick={()=>setCurQ(c=>c-1)}>← Prev</button>
+                  <span className="q-nav-count">{curQ+1} / {filteredQs.length}</span>
+                  <button className="nav-btn" disabled={curQ===filteredQs.length-1} onClick={()=>setCurQ(c=>c+1)}>Next →</button>
                 </div>
               </>
             )}
@@ -310,103 +363,123 @@ export default function Analyser() {
 
 const CSS = `
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#f5f5f5;color:#212121;font-family:'Roboto',sans-serif;min-height:100vh}
-.hdr{background:#1a237e;color:white;padding:0 24px;display:flex;align-items:center;height:56px;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,.3);position:sticky;top:0;z-index:100}
-.logo{display:flex;align-items:center;gap:8px;cursor:pointer}
-.logo-mark{width:32px;height:32px;background:#ffeb3b;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Roboto Mono',monospace;font-weight:700;font-size:.8rem;color:#1a237e}
-.logo-txt{font-weight:700;font-size:1.1rem;color:white}.logo-txt span{color:#ffeb3b}
+body{background:#f0f2f5;color:#212121;font-family:'Roboto',sans-serif;min-height:100vh}
+.hdr{background:#1a237e;color:white;padding:0 20px;display:flex;align-items:center;height:54px;gap:12px;box-shadow:0 2px 6px rgba(0,0,0,.25);position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:7px;cursor:pointer;text-decoration:none;flex-shrink:0}
+.logo-mark{width:30px;height:30px;background:#ffeb3b;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:'Roboto Mono',monospace;font-weight:700;font-size:.76rem;color:#1a237e}
+.logo-txt{font-weight:700;font-size:1rem;color:white}.logo-txt span{color:#ffeb3b}
+.hdr-title{flex:1;font-size:.86rem;font-weight:600;color:rgba(255,255,255,.85);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hdr-right{flex-shrink:0}
 .nav{display:flex;align-items:center;gap:4px;flex:1}
-.nb{padding:6px 14px;border-radius:4px;font-family:'Roboto',sans-serif;font-weight:500;font-size:.82rem;cursor:pointer;border:none;background:transparent;color:rgba(255,255,255,.8);transition:all .15s;text-decoration:none;display:inline-block}
+.nb{padding:5px 12px;border-radius:4px;font-family:'Roboto',sans-serif;font-weight:500;font-size:.8rem;cursor:pointer;border:none;background:transparent;color:rgba(255,255,255,.8);text-decoration:none;display:inline-block}
 .nb:hover{color:white;background:rgba(255,255,255,.1)}.nb.active{background:rgba(255,255,255,.2);color:white}
-.btn-sm{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:white;padding:6px 13px;border-radius:6px;font-size:.78rem;font-weight:500;cursor:pointer;font-family:'Roboto',sans-serif}
+.btn-sm{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:white;padding:5px 12px;border-radius:5px;font-size:.76rem;font-weight:500;cursor:pointer;font-family:'Roboto',sans-serif}
 .btn-sm:hover{background:rgba(255,255,255,.25)}
-.wrap{max-width:800px;margin:0 auto;padding:28px 18px 80px}
-.narrow{max-width:700px}
-.anim{animation:up .3s ease both}
-.page-hero{margin-bottom:20px}
-.page-hero h2{font-size:1.5rem;font-weight:700;color:#1a237e;margin-bottom:4px}
-.page-hero p{font-size:.83rem;color:#666}
-.up-zone{background:white;border:2px dashed #ccc;border-radius:10px;padding:48px 24px;text-align:center;transition:all .22s;cursor:pointer}
-.up-zone:hover,.up-zone.drag{border-color:#1a237e;background:#e8eaf6}
-.up-icon{font-size:2.5rem;margin-bottom:10px}
-.up-title{font-size:1rem;font-weight:700;color:#212121;margin-bottom:5px}
-.up-sub{font-size:.78rem;color:#888;margin-bottom:16px}
-.btn-primary{background:#1a237e;color:white;border:none;padding:9px 18px;border-radius:6px;font-weight:700;font-size:.82rem;cursor:pointer;font-family:'Roboto',sans-serif}
-.err-box{background:#ffebee;border:1px solid #ef9a9a;border-radius:8px;padding:12px 16px;font-size:.82rem;color:#c62828;margin-top:14px}
-.info-card{background:white;border:1px solid #e0e0e0;border-radius:8px;padding:16px 18px}
-.info-card-title{font-size:.72rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-family:'Roboto Mono',monospace}
 
-/* Analyser layout */
-.analyser-wrap{max-width:1100px;margin:0 auto;padding:20px 18px 80px}
-.score-header{background:white;border:1px solid #e0e0e0;border-radius:10px;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-.score-test-name{font-size:1.05rem;font-weight:700;color:#1a237e;margin-bottom:6px}
-.score-meta{display:flex;gap:6px;flex-wrap:wrap}
-.score-tag{font-size:.68rem;background:#f5f5f5;border:1px solid #e0e0e0;padding:2px 9px;border-radius:20px;color:#555;font-family:'Roboto Mono',monospace}
-.score-big{display:flex;align-items:baseline;gap:3px}
-.score-num{font-family:'Roboto Mono',monospace;font-size:2.8rem;font-weight:700}
-.score-denom{font-size:1rem;color:#888;font-family:'Roboto Mono',monospace}
-.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px}
-.sum-card{background:white;border:1px solid #e0e0e0;border-radius:8px;padding:14px;text-align:center;transition:all .15s;border-width:1.5px}
-.sum-card:hover{transform:translateY(-1px)}
-.sum-card.active{box-shadow:0 0 0 2px #1a237e}
-.sum-val{font-family:'Roboto Mono',monospace;font-size:1.6rem;font-weight:700;margin-bottom:3px}
-.sum-lbl{font-size:.65rem;color:#666;text-transform:uppercase;letter-spacing:.5px}
-.subj-breakdown{background:white;border:1px solid #e0e0e0;border-radius:10px;padding:18px;margin-bottom:14px}
-.section-title{font-size:.7rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1.5px;font-family:'Roboto Mono',monospace;margin-bottom:12px}
-.subj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
-.subj-card{background:#fafafa;border:1px solid #e0e0e0;border-radius:8px;padding:14px}
-.subj-card-name{font-weight:700;font-size:.88rem;margin-bottom:4px}
-.subj-card-score{font-family:'Roboto Mono',monospace;font-size:1rem;font-weight:700;color:#212121;margin-bottom:8px}
-.subj-bar-wrap{height:5px;background:#e0e0e0;border-radius:99px;margin-bottom:8px;overflow:hidden}
-.subj-bar{height:100%;border-radius:99px;transition:width .5s ease}
-.subj-card-stats{display:flex;gap:8px;font-size:.72rem;font-family:'Roboto Mono',monospace;font-weight:700}
+/* Upload */
+.upload-page{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 54px);padding:20px}
+.upload-card{background:white;border-radius:12px;padding:36px;width:100%;max-width:480px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.1)}
+.upload-icon{font-size:2.5rem;margin-bottom:12px}
+.upload-card h2{font-size:1.4rem;font-weight:700;color:#1a237e;margin-bottom:6px}
+.upload-card p{font-size:.82rem;color:#666;margin-bottom:20px}
+.up-zone{background:#f5f5f5;border:2px dashed #ccc;border-radius:10px;padding:32px 16px;cursor:pointer;transition:all .2s}
+.up-zone:hover,.up-zone.drag{border-color:#1a237e;background:#e8eaf6}
+.btn-upload{display:inline-block;background:#1a237e;color:white;padding:8px 22px;border-radius:6px;font-weight:700;font-size:.82rem;cursor:pointer}
+.err-box{background:#ffebee;border:1px solid #ef9a9a;border-radius:6px;padding:10px 14px;font-size:.8rem;color:#c62828;margin-top:12px;text-align:left}
+.how-to{background:#e8eaf6;border-radius:8px;padding:12px 14px;font-size:.76rem;color:#555;margin-top:16px;text-align:left;line-height:1.8}
+.anim{animation:up .3s ease both}
+
+/* Score banner */
+.score-banner{background:#1a237e;color:white;padding:16px 20px}
+.score-banner-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.score-main{flex-shrink:0}
+.score-label{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.75;margin-bottom:2px;font-family:'Roboto Mono',monospace}
+.score-value{font-family:'Roboto Mono',monospace;font-size:2.4rem;font-weight:700}
+.score-max{font-size:1rem;opacity:.6;font-weight:400}
+.score-stats{display:flex;gap:8px;flex-wrap:wrap;flex:1}
+.score-stat{border-radius:8px;padding:10px 14px;text-align:center;min-width:72px;flex:1}
+.score-stat-val{font-family:'Roboto Mono',monospace;font-size:1.2rem;font-weight:700;margin-bottom:2px}
+.score-stat-lbl{font-size:.58rem;color:#555;text-transform:uppercase;letter-spacing:.3px}
+
+/* Breakdown table */
+.breakdown-wrap{max-width:1200px;margin:16px auto;padding:0 16px}
+.breakdown-title{font-size:.7rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1.5px;font-family:'Roboto Mono',monospace;margin-bottom:8px}
+.breakdown-table{background:white;border-radius:10px;border:1px solid #e0e0e0;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.bt-head{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;padding:10px 16px;background:#f5f5f5;border-bottom:1px solid #e0e0e0;font-size:.7rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;font-family:'Roboto Mono',monospace}
+.bt-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;padding:12px 16px;border-bottom:1px solid #f0f0f0;cursor:pointer;transition:background .12s;font-size:.88rem}
+.bt-row:last-child{border-bottom:none}
+.bt-row:hover{background:#f5f7ff}
+.bt-row.sel{background:#e8eaf6;border-left:3px solid #1a237e}
+.bt-row.overall{cursor:default;background:#fafafa;font-size:.86rem}
+.bt-row.overall:hover{background:#fafafa}
+.bt-subj{display:flex;align-items:center;gap:7px;font-weight:600}
+.bt-subj-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.bt-col{display:flex;align-items:center;gap:2px;font-family:'Roboto Mono',monospace;font-size:.85rem}
+.bt-denom{font-size:.7rem;color:#aaa;margin-left:1px}
+
+/* Review section */
+.review-wrap{max-width:1200px;margin:16px auto 60px;padding:0 16px}
+.review-title{font-size:.7rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1.5px;font-family:'Roboto Mono',monospace;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.review-count{font-size:.65rem;color:#aaa;font-weight:400}
+.subj-tabs-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.subj-tab{padding:6px 14px;border-radius:20px;font-family:'Roboto Mono',monospace;font-size:.72rem;font-weight:700;cursor:pointer;border:1.5px solid;background:white;transition:all .15s}
+.subj-tab:hover{opacity:.85}
+.subj-tab.active{color:white!important}
 .review-layout{display:flex;gap:14px;align-items:flex-start}
-.review-nav{width:200px;flex-shrink:0;background:white;border:1px solid #e0e0e0;border-radius:10px;overflow:hidden;position:sticky;top:74px}
-.review-nav-title{padding:10px 13px;border-bottom:1px solid #e0e0e0;font-size:.78rem;font-weight:700;color:#1a237e;display:flex;justify-content:space-between;align-items:center;font-family:'Roboto Mono',monospace;text-transform:uppercase;letter-spacing:1px}
-.review-nav-count{font-size:.65rem;color:#888;font-weight:400}
-.filter-row{display:flex;gap:3px;flex-wrap:wrap;padding:8px 10px;border-bottom:1px solid #e0e0e0}
-.filter-btn{padding:3px 7px;border-radius:4px;font-size:.65rem;font-weight:700;cursor:pointer;border:1px solid #ddd;background:white;color:#555;font-family:'Roboto Mono',monospace;transition:all .12s}
-.filter-btn.on{color:white}
-.nav-dots{padding:8px;display:grid;grid-template-columns:repeat(5,1fr);gap:3px;max-height:400px;overflow-y:auto}
-.nav-dot{height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:'Roboto Mono',monospace;font-size:.58rem;font-weight:700;cursor:pointer;color:white;transition:all .1s}
-.nav-dot:hover{opacity:.85;transform:scale(1.08)}
-.nav-dot.cur{outline:2.5px solid #1a237e;outline-offset:1px}
-.review-detail{flex:1;background:white;border:1px solid #e0e0e0;border-radius:10px;padding:20px;min-height:400px}
-.detail-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
-.detail-qnum{font-family:'Roboto Mono',monospace;font-size:.82rem;font-weight:700;background:#f5f5f5;padding:4px 12px;border-radius:4px;border:1px solid #ddd;color:#333}
-.detail-subj{font-size:.68rem;font-weight:700;padding:3px 9px;border-radius:20px;font-family:'Roboto Mono',monospace}
-.detail-type{font-size:.62rem;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:2px 8px;border-radius:20px;font-family:'Roboto Mono',monospace;font-weight:700}
-.detail-result-badge{font-size:.75rem;font-weight:700;padding:4px 12px;border-radius:20px}
-.detail-qtext{font-size:.93rem;line-height:1.85;color:#212121;background:#fafafa;border:1px solid #e0e0e0;border-radius:6px;padding:16px;margin-bottom:16px;white-space:pre-wrap}
-.detail-opts{display:flex;flex-direction:column;gap:7px;margin-bottom:16px}
-.detail-opt{display:flex;align-items:flex-start;gap:10px;border:1.5px solid #e0e0e0;border-radius:6px;padding:10px 13px;background:white}
-.detail-opt.correct{border-color:#2e7d32;background:#e8f5e9}
-.detail-opt.wrong{border-color:#c62828;background:#ffebee}
-.detail-opt-lbl{font-family:'Roboto Mono',monospace;font-size:.72rem;font-weight:700;color:#555;min-width:20px;background:#f5f5f5;border-radius:3px;text-align:center;padding:2px 5px;flex-shrink:0}
-.detail-opt.correct .detail-opt-lbl{background:#2e7d32;color:white}
-.detail-opt.wrong .detail-opt-lbl{background:#c62828;color:white}
-.detail-opt-text{flex:1;font-size:.88rem;color:#212121;line-height:1.6}
-.detail-opt-tag{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
-.tag-correct{font-size:.62rem;font-weight:700;color:#2e7d32;background:#e8f5e9;border:1px solid #a5d6a7;padding:1px 6px;border-radius:10px;white-space:nowrap}
-.tag-wrong{font-size:.62rem;font-weight:700;color:#c62828;background:#ffebee;border:1px solid #ef9a9a;padding:1px 6px;border-radius:10px;white-space:nowrap}
-.int-answer-box{background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:14px}
-.int-answer-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
-.int-answer-row:last-child{margin-bottom:0}
-.int-label{font-size:.78rem;color:#666;min-width:130px}
+
+/* Left nav panel */
+.rev-nav{width:220px;flex-shrink:0;background:white;border:1px solid #e0e0e0;border-radius:10px;overflow:hidden;position:sticky;top:62px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.filter-row{display:flex;gap:3px;padding:8px;border-bottom:1px solid #e0e0e0;flex-wrap:wrap}
+.filter-btn{padding:4px 8px;border-radius:4px;font-size:.68rem;font-weight:700;cursor:pointer;border:1.5px solid #ddd;background:white;font-family:'Roboto Mono',monospace;transition:all .12s}
+.filter-btn.on{color:white!important}
+.filter-btn:hover{opacity:.8}
+.dot-grid{padding:8px;display:grid;grid-template-columns:repeat(5,1fr);gap:3px;max-height:380px;overflow-y:auto}
+.q-dot{height:28px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:'Roboto Mono',monospace;font-size:.58rem;font-weight:700;cursor:pointer;color:white;transition:transform .1s}
+.q-dot:hover{transform:scale(1.1)}
+.q-dot.cur{outline-offset:2px}
+.legend{padding:8px 10px;border-top:1px solid #e0e0e0;display:flex;flex-wrap:wrap;gap:6px}
+.leg-item{display:flex;align-items:center;gap:3px;font-size:.6rem;color:#666}
+.leg-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+
+/* Right detail panel */
+.rev-detail{flex:1;background:white;border:1px solid #e0e0e0;border-radius:10px;padding:18px;min-height:300px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.empty-q{text-align:center;padding:60px 20px;color:#bbb;font-size:.85rem}
+.q-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.q-header-left{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.q-num-badge{font-family:'Roboto Mono',monospace;font-size:.8rem;font-weight:700;background:#f0f0f0;padding:3px 10px;border-radius:4px;border:1px solid #ddd;color:#333}
+.q-subj-badge{font-size:.68rem;font-weight:700;padding:3px 9px;border-radius:20px;font-family:'Roboto Mono',monospace}
+.q-type-badge{font-size:.62rem;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:2px 8px;border-radius:20px;font-family:'Roboto Mono',monospace;font-weight:700}
+.q-result-badge{font-size:.74rem;font-weight:700;padding:4px 12px;border-radius:20px}
+.q-text{font-size:.9rem;line-height:1.85;color:#212121;background:#fafafa;border:1px solid #e0e0e0;border-radius:6px;padding:14px;margin-bottom:14px;white-space:pre-wrap}
+.q-opts{display:flex;flex-direction:column;gap:7px;margin-bottom:14px}
+.q-opt{display:flex;align-items:flex-start;gap:10px;border:1.5px solid #e0e0e0;border-radius:6px;padding:10px 12px;background:white}
+.q-opt.correct{border-color:#2e7d32;background:#e8f5e9}
+.q-opt.wrong{border-color:#c62828;background:#ffebee}
+.q-opt-lbl{font-family:'Roboto Mono',monospace;font-size:.7rem;font-weight:700;color:#666;min-width:20px;background:#f0f0f0;border-radius:3px;text-align:center;padding:2px 5px;flex-shrink:0}
+.q-opt.correct .q-opt-lbl{background:#2e7d32;color:white}
+.q-opt.wrong .q-opt-lbl{background:#c62828;color:white}
+.q-opt-text{flex:1;font-size:.86rem;color:#212121;line-height:1.6}
+.q-opt-tags{flex-shrink:0;display:flex;gap:3px;align-items:center}
+.tag{font-size:.6rem;font-weight:700;padding:1px 6px;border-radius:10px;white-space:nowrap}
+.tag.green{background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7}
+.tag.red{background:#ffebee;color:#c62828;border:1px solid #ef9a9a}
+.int-box{background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:14px}
+.int-row{display:flex;align-items:center;gap:12px;margin-bottom:7px}
+.int-row:last-child{margin-bottom:0}
+.int-lbl{font-size:.78rem;color:#666;min-width:130px}
 .int-val{font-family:'Roboto Mono',monospace;font-size:1.1rem;font-weight:700}
-.detail-nav{display:flex;align-items:center;justify-content:space-between;padding-top:14px;border-top:1px solid #eee;margin-top:4px}
-.btn-prev,.btn-next{padding:8px 16px;border-radius:4px;font-family:'Roboto',sans-serif;font-size:.78rem;font-weight:500;cursor:pointer;border:1px solid #ccc;background:white;color:#333;transition:all .12s}
-.btn-prev:hover,.btn-next:hover{border-color:#1a237e;color:#1a237e}
-.btn-prev:disabled,.btn-next:disabled{opacity:.35;cursor:not-allowed}
-.empty-state{text-align:center;padding:60px 20px;color:#aaa}
-.empty-state span{font-size:2.5rem;display:block;margin-bottom:12px}
-.empty-state p{font-size:.85rem}
+.q-nav{display:flex;align-items:center;justify-content:space-between;padding-top:12px;border-top:1px solid #eee}
+.q-nav-count{font-size:.76rem;color:#888;font-family:'Roboto Mono',monospace}
+.nav-btn{padding:7px 16px;border-radius:4px;font-family:'Roboto',sans-serif;font-size:.78rem;font-weight:500;cursor:pointer;border:1px solid #ccc;background:white;color:#333;transition:all .12s}
+.nav-btn:hover{border-color:#1a237e;color:#1a237e}
+.nav-btn:disabled{opacity:.35;cursor:not-allowed}
 @keyframes up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:700px){
   .review-layout{flex-direction:column}
-  .review-nav{width:100%;position:static}
-  .nav-dots{grid-template-columns:repeat(8,1fr)}
-  .summary-grid{grid-template-columns:repeat(3,1fr)}
-  .subj-grid{grid-template-columns:1fr}
+  .rev-nav{width:100%;position:static}
+  .dot-grid{grid-template-columns:repeat(8,1fr)}
+  .score-stats{justify-content:center}
+  .bt-head,.bt-row{grid-template-columns:2fr 1fr 1fr 1fr}
+  .bt-head>:last-child,.bt-row>:last-child{display:none}
 }
 `
