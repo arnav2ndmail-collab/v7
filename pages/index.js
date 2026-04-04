@@ -179,7 +179,8 @@ export default function TestZyro() {
       subjStats:res.subjStats,
       questions:Qs.map((q,i)=>({
         qnum:q.qnum||i+1, subject:q.subject||'Other', type:q.type, text:q.text,
-        opts:q.opts, correctAnswer:q.ans, yourAnswer:res.answers[i],
+        opts:q.opts, images:q.images||null, hasImage:q.hasImage||false,
+        correctAnswer:q.ans, yourAnswer:res.answers[i],
         result: !res.answers[i]?'unattempted':res.answers[i]==='skip'?'skipped':
           ((q.ans||'').toUpperCase().trim()===(res.answers[i]||'').toUpperCase().trim())?'correct':'wrong'
       }))
