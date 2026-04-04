@@ -389,7 +389,12 @@ export default function TestZyro() {
                 return (
                   <button key={s} className={`subj-tab${isActive?' active':''}`}
                     style={isActive?{background:sc.bg,color:'#fff',borderColor:sc.bg}:{}}
-                    onClick={()=>setActiveNavSubj(s)}>
+                    onClick={()=>{
+                      setActiveNavSubj(s)
+                      // Jump to first question of this subject
+                      const firstIdx = subjGroups[s]?.[0]
+                      if (firstIdx !== undefined) goTo(firstIdx)
+                    }}>
                     <span className="subj-tab-label">{sc.label}</span>
                     <span className="subj-tab-name">{s}</span>
                     <span className="subj-tab-count">{answered}/{indices.length}</span>
@@ -478,7 +483,11 @@ export default function TestZyro() {
                       <div key={s} className={`sb-section${isActiveSection?' active':''}`}>
                         <div className="sb-section-hdr"
                           style={{background:sc.light,color:sc.bg,borderLeft:`4px solid ${sc.dot}`}}
-                          onClick={()=>setActiveNavSubj(s)}>
+                          onClick={()=>{
+                            setActiveNavSubj(s)
+                            const firstIdx = subjGroups[s]?.[0]
+                            if (firstIdx !== undefined) goTo(firstIdx)
+                          }}>
                           <span className="sb-section-label">{sc.label}</span>
                           <span className="sb-section-name">{s}</span>
                           <span className="sb-section-count">{indices.filter(i=>ans[i]&&ans[i]!=='skip').length}/{indices.length}</span>
