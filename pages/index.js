@@ -302,6 +302,7 @@ export default function TestZyro() {
             <button key={p} className={`nb${page===p?' active':''}`} onClick={()=>setPage(p)}>{l}</button>
           ))}
           <a href="/analyser" className="nb">📊 Analyser</a>
+          <a href="/solutions" className="nb">📄 Solutions</a>
           <a href="/admin" className="nb">⚙️ Admin</a>
         </nav>
       </header>

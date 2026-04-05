@@ -288,7 +288,7 @@ export default function AdminPage() {
             <div className="s-name">TestZyro<br/><span>Admin</span></div>
           </div>
           <nav className="sidebar-nav">
-            {[['bitsat','📦','BITSAT ZIP'],['tests','📋','All Tests'],['json','📤','JSON Upload']].map(([t,ic,lb])=>(
+            {[['bitsat','📦','BITSAT ZIP'],['tests','📋','All Tests'],['solutions','📄','Solutions'],['json','📤','JSON Upload']].map(([t,ic,lb])=>(
               <button key={t} className={`s-btn${tab===t?' on':''}`} onClick={()=>setTab(t)}>
                 <span className="s-ic">{ic}</span><span>{lb}</span>
               </button>
@@ -448,6 +448,42 @@ export default function AdminPage() {
                 )
               })}
               {!loading&&tests.length===0&&<div className="empty">No tests yet. Use BITSAT ZIP tab to add one.</div>}
+            </div>
+          )}
+
+          {/* ═══ SOLUTIONS ═══ */}
+          {tab==='solutions' && (
+            <div className="section">
+              <div className="sec-head">
+                <h1>📄 Solutions / Answer Keys</h1>
+                <p>Upload PDF solution files — organised by folder just like your test series</p>
+              </div>
+              <div className="format-box">
+                <div className="fb-title">📁 Folder structure (in GitHub repo)</div>
+                <pre className="code" style={{marginTop:8}}>{`public/solutions/
+  BITSAT SERIES 1/
+    BITSAT-1-SOL.pdf    ← name it same as test
+    BITSAT-2-SOL.pdf
+  BITSAT SERIES 2/
+    BITSAT-1-SOL.pdf
+  BITSAT SERIES 3 (PYQ)/
+    BITSAT-PYQ-1-SOL.pdf`}</pre>
+              </div>
+              <div className="format-box" style={{marginTop:14}}>
+                <div className="fb-title">✅ Steps to add solutions</div>
+                <div style={{fontSize:'.84rem',color:'#333',lineHeight:2.2}}>
+                  <b>1.</b> Go to your GitHub repo<br/>
+                  <b>2.</b> Navigate to <code style={{background:'#f0f0f0',padding:'1px 6px',borderRadius:4,fontFamily:'monospace'}}>public/solutions/</code><br/>
+                  <b>3.</b> Create a folder matching your series name (e.g. <code style={{background:'#f0f0f0',padding:'1px 6px',borderRadius:4,fontFamily:'monospace'}}>BITSAT SERIES 1</code>)<br/>
+                  <b>4.</b> Upload your PDF file inside it<br/>
+                  <b>5.</b> Commit &amp; push → appears on Solutions page instantly ✅
+                </div>
+              </div>
+              <div style={{marginTop:16,textAlign:'center'}}>
+                <a href="/solutions" target="_blank" className="proc-btn" style={{display:'inline-flex',textDecoration:'none'}}>
+                  👁 View Solutions Page →
+                </a>
+              </div>
             </div>
           )}
 
