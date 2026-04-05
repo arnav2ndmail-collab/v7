@@ -1,222 +1,179 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import Head from 'next/head'
 
 const SUBJ_ORDER = ['Physics','Chemistry','Maths','English & LR']
-const SUBJ_COLORS = {
-  'Physics':      { accent:'#1565c0', light:'#e3f2fd', border:'#90caf9', label:'PHY' },
-  'Chemistry':    { accent:'#2e7d32', light:'#e8f5e9', border:'#a5d6a7', label:'CHEM' },
-  'Maths':        { accent:'#c62828', light:'#ffebee', border:'#ef9a9a', label:'MATH' },
-  'English & LR': { accent:'#6a1b9a', light:'#f3e5f5', border:'#ce93d8', label:'ENG' },
+const SC = {
+  'Physics':      { bg:'#1565c0', grd:'linear-gradient(135deg,#1565c0,#1976d2)', light:'#dbeafe', dot:'#3b82f6', label:'PHY', emoji:'⚡' },
+  'Chemistry':    { bg:'#15803d', grd:'linear-gradient(135deg,#15803d,#16a34a)', light:'#dcfce7', dot:'#4ade80', label:'CHEM', emoji:'🧪' },
+  'Maths':        { bg:'#b91c1c', grd:'linear-gradient(135deg,#b91c1c,#dc2626)', light:'#fee2e2', dot:'#f87171', label:'MATH', emoji:'📐' },
+  'English & LR': { bg:'#7c3aed', grd:'linear-gradient(135deg,#7c3aed,#8b5cf6)', light:'#ede9fe', dot:'#a78bfa', label:'ENG',  emoji:'📖' },
 }
-const SC = s => SUBJ_COLORS[s] || { accent:'#455a64', light:'#eceff1', border:'#b0bec5', label:'Q' }
-
+const getSC = s => SC[s] || { bg:'#475569',grd:'linear-gradient(135deg,#475569,#64748b)',light:'#f1f5f9',dot:'#94a3b8',label:'Q',emoji:'📝' }
 const RES = {
-  correct:     { color:'#2e7d32', bg:'#e8f5e9', border:'#a5d6a7', label:'✓ Correct',       dot:'#2e7d32' },
-  wrong:       { color:'#c62828', bg:'#ffebee', border:'#ef9a9a', label:'✗ Wrong',          dot:'#c62828' },
-  skipped:     { color:'#e65100', bg:'#fff3e0', border:'#ffcc80', label:'↩ Skipped',        dot:'#e65100' },
-  unattempted: { color:'#757575', bg:'#f5f5f5', border:'#e0e0e0', label:'— Not Attempted',  dot:'#bdbdbd' },
+  correct:     { color:'#15803d', bg:'#dcfce7', border:'#86efac', label:'✓ Correct' },
+  wrong:       { color:'#b91c1c', bg:'#fee2e2', border:'#fca5a5', label:'✗ Wrong' },
+  skipped:     { color:'#c2410c', bg:'#ffedd5', border:'#fdba74', label:'↩ Skipped' },
+  unattempted: { color:'#475569', bg:'#f1f5f9', border:'#cbd5e1', label:'— Not Attempted' },
 }
+const DOT_COLOR = { correct:'#4ade80', wrong:'#f87171', skipped:'#fb923c', unattempted:'#334155' }
 
 export default function Analyser() {
-  const [data, setData]       = useState(null)
-  const [err,  setErr]        = useState('')
-  const [drag, setDrag]       = useState(false)
-  const [tab,  setTab]        = useState('overview')   // overview | review
+  const [data, setData] = useState(null)
+  const [err, setErr]   = useState('')
+  const [drag, setDrag] = useState(false)
+  const [tab, setTab]   = useState('overview')
   const [activeSubj, setActiveSubj] = useState(null)
-  const [filter, setFilter]   = useState('all')
-  const [curQ,  setCurQ]      = useState(0)
+  const [filter, setFilter] = useState('all')
+  const [curQ, setCurQ] = useState(0)
   const fileRef = useRef()
 
   const loadFile = async file => {
     setErr(''); setData(null)
     try {
-      const text = await file.text()
-      const d = JSON.parse(text)
-      if (!Array.isArray(d.questions)) throw new Error('No questions found in this file')
-      d.questions = d.questions.map((q,i) => ({
+      const d = JSON.parse(await file.text())
+      if (!Array.isArray(d.questions)) throw new Error('No questions array found')
+      d.questions = d.questions.map(q => ({
         ...q,
-        result: q.result || (
-          !q.yourAnswer ? 'unattempted' :
-          q.yourAnswer === 'skip' ? 'skipped' :
-          (String(q.correctAnswer||'').toUpperCase().trim() === String(q.yourAnswer||'').toUpperCase().trim())
-            ? 'correct' : 'wrong'
-        )
+        result: q.result || (!q.yourAnswer ? 'unattempted' : q.yourAnswer==='skip' ? 'skipped' :
+          String(q.correctAnswer||'').toUpperCase().trim() === String(q.yourAnswer||'').toUpperCase().trim() ? 'correct' : 'wrong')
       }))
-      const firstSubj = SUBJ_ORDER.find(s => d.questions.some(q => q.subject === s)) || d.questions[0]?.subject || null
-      setData(d)
-      setActiveSubj(firstSubj)
-      setCurQ(0); setFilter('all'); setTab('overview')
-    } catch(e) { setErr('❌ ' + e.message) }
+      const first = SUBJ_ORDER.find(s => d.questions.some(q=>q.subject===s)) || d.questions[0]?.subject
+      setData(d); setActiveSubj(first); setCurQ(0); setFilter('all'); setTab('overview')
+    } catch(e) { setErr('❌ '+e.message) }
   }
 
-  const handleDrop = e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if(f) loadFile(f) }
+  const handleDrop = e => { e.preventDefault(); setDrag(false); loadFile(e.dataTransfer.files[0]) }
 
-  // ── Upload screen ─────────────────────────────────────────────────────────
+  // Upload screen
   if (!data) return (
     <>
       <Head><title>TestZyro — Analyser</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
       </Head>
-      <style>{`${BASE_CSS}${UPLOAD_CSS}`}</style>
-      <div className="upload-page">
-        <div className="upload-hero">
-          <div className="upload-logo">📊</div>
-          <h1>Test Analyser</h1>
-          <p>Upload your result file to get detailed subject-wise analysis</p>
+      <style>{BASE_CSS}</style>
+      <div className="upload-shell">
+        <div className="upload-card">
+          <a href="/" className="back-link">← TestZyro</a>
+          <div className="upload-icon-wrap"><div className="upload-icon">📊</div></div>
+          <h1 className="upload-title">Test Analyser</h1>
+          <p className="upload-sub">Upload your result file for detailed subject-wise analysis</p>
           <div className={`dropzone${drag?' drag':''}`}
             onDragOver={e=>{e.preventDefault();setDrag(true)}}
             onDragLeave={()=>setDrag(false)}
             onDrop={handleDrop}
             onClick={()=>fileRef.current.click()}>
-            <div className="dz-icon">📥</div>
-            <div className="dz-title">Drop result .json here</div>
-            <div className="dz-sub">Downloaded after submitting a test</div>
+            <div style={{fontSize:'2.5rem',marginBottom:12}}>📥</div>
+            <div className="dz-title">Drop result .json file here</div>
+            <div className="dz-sub">Downloaded after submitting a test on TestZyro</div>
             <div className="dz-btn">Browse File</div>
             <input ref={fileRef} type="file" accept=".json" style={{display:'none'}} onChange={e=>{if(e.target.files[0])loadFile(e.target.files[0])}}/>
           </div>
           {err && <div className="upload-err">{err}</div>}
-          <div className="upload-hint">
-            <b>How?</b> Complete a test → click <b>📥 Download Output File</b> → upload it here
+          <div className="upload-steps">
+            <div className="us-step"><div className="us-n">1</div><div>Complete a test on TestZyro</div></div>
+            <div className="us-arrow">→</div>
+            <div className="us-step"><div className="us-n">2</div><div>Click <b>📥 Download Output File</b></div></div>
+            <div className="us-arrow">→</div>
+            <div className="us-step"><div className="us-n">3</div><div>Upload it here ✅</div></div>
           </div>
         </div>
       </div>
     </>
   )
 
-  // ── Computed data ─────────────────────────────────────────────────────────
-  const allQs    = data.questions
-  const subjects = SUBJ_ORDER.filter(s => allQs.some(q => q.subject === s))
-  if (!subjects.length) subjects.push(allQs[0]?.subject || 'All')
-
-  const getSubjQs = s => s ? allQs.filter(q => q.subject === s) : allQs
-  const subjQs    = getSubjQs(activeSubj)
-  const filteredQs = filter === 'all' ? subjQs : subjQs.filter(q => q.result === filter)
-  const curQuestion = filteredQs[curQ] || null
-
-  const makeStats = qs => ({
-    total:       qs.length,
-    correct:     qs.filter(q => q.result==='correct').length,
-    wrong:       qs.filter(q => q.result==='wrong').length,
-    skipped:     qs.filter(q => q.result==='skipped').length,
-    unattempted: qs.filter(q => q.result==='unattempted').length,
-  })
-  const overallStats = makeStats(allQs)
-  const mCor = data.marksCorrect || 3
-  const mNeg = data.marksWrong  || 1
+  // Computed
+  const allQs = data.questions
+  const subjects = SUBJ_ORDER.filter(s => allQs.some(q=>q.subject===s))
+  if (!subjects.length) subjects.push(allQs[0]?.subject||'All')
+  const getSubjQs = s => s ? allQs.filter(q=>q.subject===s) : allQs
+  const subjQs = getSubjQs(activeSubj)
+  const filteredQs = filter==='all' ? subjQs : subjQs.filter(q=>q.result===filter)
+  const curQ2 = filteredQs[curQ] || null
+  const ms = (qs) => ({ total:qs.length, cor:qs.filter(q=>q.result==='correct').length, wrg:qs.filter(q=>q.result==='wrong').length, skp:qs.filter(q=>q.result==='skipped').length, un:qs.filter(q=>q.result==='unattempted').length })
+  const overall = ms(allQs)
+  const mCor=data.marksCorrect||3, mNeg=data.marksWrong||1
+  const accuracy = (overall.cor+overall.wrg) ? Math.round(overall.cor/(overall.cor+overall.wrg)*100) : 0
 
   const switchSubj = s => { setActiveSubj(s); setCurQ(0); setFilter('all') }
-  const switchFilter = f => { setFilter(f); setCurQ(0) }
+  const openReview = (s, f='all') => { switchSubj(s); setFilter(f); setCurQ(0); setTab('review') }
 
-  const openReview = (subj, f='all', idx=0) => {
-    setActiveSubj(subj); setFilter(f); setCurQ(idx); setTab('review')
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
       <Head><title>Analyser — {data.testTitle}</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
       </Head>
-      <style>{`${BASE_CSS}${APP_CSS}`}</style>
+      <style>{BASE_CSS+APP_CSS}</style>
 
-      {/* ── Top nav ── */}
-      <header className="topnav">
-        <a href="/" className="tz-logo"><span className="tz-mark">TZ</span><span className="tz-name">TestZyro</span></a>
-        <div className="nav-tabs">
-          <button className={`nav-tab${tab==='overview'?' active':''}`} onClick={()=>setTab('overview')}>📋 Overview</button>
-          <button className={`nav-tab${tab==='review'?' active':''}`} onClick={()=>setTab('review')}>📖 Review Questions</button>
-        </div>
-        <div className="nav-right">
-          <div className="test-name-chip">{data.testTitle}</div>
-          <button className="btn-new" onClick={()=>setData(null)}>↩ New File</button>
+      {/* Header */}
+      <header className="app-header">
+        <div className="app-header-inner">
+          <a href="/" className="app-logo"><span className="al-icon">🎯</span><span className="al-text">Test<b>Zyro</b></span></a>
+          <div className="app-tabs">
+            <button className={`app-tab${tab==='overview'?' on':''}`} onClick={()=>setTab('overview')}>📋 Overview</button>
+            <button className={`app-tab${tab==='review'?' on':''}`} onClick={()=>setTab('review')}>📖 Review</button>
+          </div>
+          <div className="app-header-right">
+            <div className="test-chip">{data.testTitle}</div>
+            <button className="new-file-btn" onClick={()=>setData(null)}>↩ New File</button>
+          </div>
         </div>
       </header>
 
-      {/* ════ OVERVIEW TAB ════ */}
-      {tab === 'overview' && (
-        <div className="page anim">
-
+      {/* ══ OVERVIEW ══ */}
+      {tab==='overview' && (
+        <div className="a-page fade-up">
           {/* Score hero */}
           <div className="score-hero">
-            <div className="score-hero-left">
-              <div className="score-hero-label">Overall Score</div>
-              <div className="score-hero-num" style={{color:data.score>=0?'#4ade80':'#f87171'}}>
-                {data.score}<span className="score-hero-max">/{data.maxScore}</span>
-              </div>
-              <div className="score-hero-sub">
-                {data.subject} &nbsp;·&nbsp;
-                {new Date(data.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})} &nbsp;·&nbsp;
-                {Math.floor((data.duration||0)/60)}m {(data.duration||0)%60}s
-              </div>
-            </div>
-            <div className="score-hero-cards">
-              {[
-                ['✓ Correct',    data.correct||0,    '#4ade80','rgba(74,222,128,.15)'],
-                ['✗ Wrong',      data.wrong||0,      '#f87171','rgba(248,113,113,.15)'],
-                ['↩ Skipped',    data.skipped||0,    '#fb923c','rgba(251,146,60,.15)'],
-                ['— Not Att.',   data.unattempted||0,'#94a3b8','rgba(148,163,184,.12)'],
-                ['🎯 Accuracy',  (data.accuracy||0)+'%','#38bdf8','rgba(56,189,248,.15)'],
-              ].map(([l,v,c,bg])=>(
-                <div key={l} className="hero-card" style={{background:bg,borderColor:c+'44'}}>
-                  <div className="hero-card-val" style={{color:c}}>{v}</div>
-                  <div className="hero-card-lbl">{l}</div>
+            <div className="sh-bg"/>
+            <div className="sh-content">
+              <div className="sh-left">
+                <div className="sh-label">Total Score</div>
+                <div className="sh-score" style={{color:data.score>=0?'#4ade80':'#f87171'}}>
+                  {data.score}<span className="sh-max">/{data.maxScore}</span>
                 </div>
-              ))}
+                <div className="sh-meta">
+                  <span>{data.subject}</span>
+                  <span>·</span>
+                  <span>{new Date(data.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</span>
+                  <span>·</span>
+                  <span>{Math.floor((data.duration||0)/60)}m {(data.duration||0)%60}s</span>
+                </div>
+              </div>
+              <div className="sh-cards">
+                {[['✓ Correct',overall.cor,'#4ade80','rgba(74,222,128,.12)'],['✗ Wrong',overall.wrg,'#f87171','rgba(248,113,113,.12)'],['↩ Skipped',overall.skp,'#fb923c','rgba(251,146,60,.12)'],['— Not Att.',overall.un,'#64748b','rgba(100,116,139,.1)'],['🎯 Accuracy',accuracy+'%','#38bdf8','rgba(56,189,248,.12)']].map(([l,v,c,bg])=>(
+                  <div key={l} className="sh-card" style={{background:bg}}>
+                    <div className="shc-val" style={{color:c}}>{v}</div>
+                    <div className="shc-lbl">{l}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Subject breakdown */}
-          <div className="section-card">
-            <div className="section-header">
-              <h2 className="section-title">📊 Performance Breakdown</h2>
-            </div>
+          {/* Breakdown table */}
+          <div className="a-section">
+            <div className="a-sec-title">📊 Performance Breakdown</div>
             <div className="breakdown-table">
               <div className="bt-head">
-                <div>Subject</div>
-                <div>Score</div>
-                <div>Correct</div>
-                <div>Wrong</div>
-                <div>Not Att.</div>
-                <div>Accuracy</div>
+                <div>Subject</div><div>Score</div><div>Correct</div><div>Wrong</div><div>Not Att.</div><div>Accuracy</div>
               </div>
-              {/* Overall */}
-              {(()=>{
-                const s = overallStats
-                const score = s.correct*mCor - s.wrong*mNeg
-                const pct = (s.correct+s.wrong) ? Math.round(s.correct/(s.correct+s.wrong)*100) : 0
-                return (
-                  <div className="bt-row bt-overall">
-                    <div className="bt-subj-cell"><span className="bt-subj-name">🔢 Overall</span></div>
-                    <div><span className="bt-big" style={{color:score>=0?'#2e7d32':'#c62828'}}>{score>=0?'+':''}{score}</span><span className="bt-den">/{data.maxScore}</span></div>
-                    <div><span className="bt-big green">{s.correct}</span><span className="bt-den">/{s.total}</span></div>
-                    <div><span className="bt-big red">{s.wrong}</span><span className="bt-den">/{s.total}</span></div>
-                    <div><span className="bt-big gray">{s.unattempted+s.skipped}</span><span className="bt-den">/{s.total}</span></div>
-                    <div>
-                      <div className="acc-bar-wrap"><div className="acc-bar" style={{width:pct+'%',background:pct>=60?'#2e7d32':'#e65100'}}/></div>
-                      <span className="acc-pct" style={{color:pct>=60?'#2e7d32':'#e65100'}}>{pct}%</span>
-                    </div>
-                  </div>
-                )
-              })()}
-              {subjects.map(s => {
-                const st = makeStats(getSubjQs(s))
-                const score = st.correct*mCor - st.wrong*mNeg
-                const pct = (st.correct+st.wrong) ? Math.round(st.correct/(st.correct+st.wrong)*100) : 0
-                const sc = SC(s)
-                return (
-                  <div key={s} className="bt-row" onClick={()=>openReview(s)} style={{cursor:'pointer'}}>
+              {[['overall', allQs], ...subjects.map(s=>[s,getSubjQs(s)])].map(([s,qs])=>{
+                const st=ms(qs); const sc=getSC(s); const isOverall=s==='overall'
+                const score=st.cor*mCor-st.wrg*mNeg; const pct=(st.cor+st.wrg)?Math.round(st.cor/(st.cor+st.wrg)*100):0
+                return(
+                  <div key={s} className={`bt-row${isOverall?' bt-overall':''}`} onClick={!isOverall?()=>openReview(s):undefined} style={!isOverall?{cursor:'pointer'}:{}}>
                     <div className="bt-subj-cell">
-                      <div className="bt-subj-dot" style={{background:sc.accent}}/>
-                      <span className="bt-subj-name">{s}</span>
-                      <span className="bt-subj-badge" style={{background:sc.light,color:sc.accent,border:`1px solid ${sc.border}`}}>{sc.label}</span>
+                      {!isOverall&&<div className="bt-dot" style={{background:sc.bg}}/>}
+                      <span style={{fontWeight:700}}>{isOverall?'🔢 Overall':s}</span>
+                      {!isOverall&&<span className="bt-sbadge" style={{background:sc.light,color:sc.bg}}>{sc.label}</span>}
                     </div>
-                    <div><span className="bt-big" style={{color:score>=0?'#2e7d32':'#c62828'}}>{score>=0?'+':''}{score}</span></div>
-                    <div><span className="bt-big green">{st.correct}</span><span className="bt-den">/{st.total}</span></div>
-                    <div><span className="bt-big red">{st.wrong}</span><span className="bt-den">/{st.total}</span></div>
-                    <div><span className="bt-big gray">{st.unattempted+st.skipped}</span><span className="bt-den">/{st.total}</span></div>
-                    <div>
-                      <div className="acc-bar-wrap"><div className="acc-bar" style={{width:pct+'%',background:sc.accent}}/></div>
-                      <span className="acc-pct" style={{color:sc.accent}}>{pct}%</span>
+                    <div className="bt-num" style={{color:score>=0?'#4ade80':'#f87171'}}>{isOverall?data.score:(score>=0?'+':'')+score}</div>
+                    <div className="bt-num green">{st.cor}<span className="bt-den">/{st.total}</span></div>
+                    <div className="bt-num red">{st.wrg}<span className="bt-den">/{st.total}</span></div>
+                    <div className="bt-num gray">{st.un+st.skp}<span className="bt-den">/{st.total}</span></div>
+                    <div className="bt-acc-cell">
+                      <div className="bt-acc-bar-w"><div className="bt-acc-bar" style={{width:pct+'%',background:isOverall?'#6366f1':sc.bg}}/></div>
+                      <span style={{color:isOverall?'#818cf8':sc.bg,fontFamily:'JetBrains Mono,monospace',fontSize:'.75rem',fontWeight:700}}>{pct}%</span>
                     </div>
                   </div>
                 )
@@ -224,171 +181,133 @@ export default function Analyser() {
             </div>
           </div>
 
-          {/* Quick review cards */}
-          <div className="quick-grid">
-            {subjects.map(s => {
-              const st = makeStats(getSubjQs(s))
-              const sc = SC(s)
-              const pct = (st.correct+st.wrong) ? Math.round(st.correct/(st.correct+st.wrong)*100) : 0
-              return (
-                <div key={s} className="quick-card" style={{borderTop:`4px solid ${sc.accent}`}}>
-                  <div className="qc-top">
-                    <span className="qc-badge" style={{background:sc.light,color:sc.accent}}>{sc.label}</span>
-                    <span className="qc-name">{s}</span>
+          {/* Subject cards */}
+          <div className="a-section">
+            <div className="a-sec-title">⚡ Subject Overview</div>
+            <div className="subj-cards-grid">
+              {subjects.map(s=>{
+                const st=ms(getSubjQs(s)); const sc=getSC(s)
+                const score=st.cor*mCor-st.wrg*mNeg; const pct=(st.cor+st.wrg)?Math.round(st.cor/(st.cor+st.wrg)*100):0
+                return(
+                  <div key={s} className="scard" style={{'--sa':sc.bg,'--sg':sc.grd}}>
+                    <div className="scard-top">
+                      <div className="scard-emoji">{sc.emoji}</div>
+                      <div>
+                        <div className="scard-badge" style={{background:sc.grd,color:'#fff'}}>{sc.label}</div>
+                        <div className="scard-name">{s}</div>
+                      </div>
+                    </div>
+                    <div className="scard-score" style={{background:`linear-gradient(135deg,${sc.bg}22,${sc.bg}08)`}}>
+                      <div className="scard-score-n" style={{color:score>=0?'#4ade80':'#f87171'}}>{score>=0?'+':''}{score}</div>
+                      <div className="scard-score-l">marks</div>
+                    </div>
+                    <div className="scard-bar-wrap"><div className="scard-bar" style={{width:pct+'%',background:sc.grd}}/></div>
+                    <div className="scard-stats">
+                      <span style={{color:'#4ade80'}}>✓{st.cor}</span>
+                      <span style={{color:'#f87171'}}>✗{st.wrg}</span>
+                      <span style={{color:'#fb923c'}}>↩{st.skp}</span>
+                      <span style={{color:'#64748b'}}>—{st.un}</span>
+                      <span style={{color:sc.bg,fontWeight:800}}>{pct}%</span>
+                    </div>
+                    <button className="scard-btn" style={{background:sc.grd}} onClick={()=>openReview(s)}>Review Questions →</button>
                   </div>
-                  <div className="qc-score" style={{color:sc.accent}}>{st.correct*mCor-st.wrong*mNeg} <span className="qc-score-s">marks</span></div>
-                  <div className="qc-bar-wrap"><div className="qc-bar" style={{width:pct+'%',background:sc.accent}}/></div>
-                  <div className="qc-stats">
-                    <span className="qc-stat green">✓ {st.correct}</span>
-                    <span className="qc-stat red">✗ {st.wrong}</span>
-                    <span className="qc-stat orange">↩ {st.skipped}</span>
-                    <span className="qc-stat gray">— {st.unattempted}</span>
-                  </div>
-                  <button className="qc-review-btn" style={{background:sc.accent}} onClick={()=>openReview(s)}>Review Questions →</button>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
-
         </div>
       )}
 
-      {/* ════ REVIEW TAB ════ */}
-      {tab === 'review' && (
-        <div className="review-page anim">
-
+      {/* ══ REVIEW ══ */}
+      {tab==='review' && (
+        <div className="review-shell">
           {/* Subject tabs */}
-          <div className="review-subj-bar">
-            {subjects.map(s => {
-              const sc = SC(s); const st = makeStats(getSubjQs(s)); const isA = activeSubj===s
-              return (
-                <button key={s} className={`rsb-tab${isA?' active':''}`}
-                  style={isA?{background:sc.accent,color:'#fff',borderColor:sc.accent}:{color:sc.accent,borderColor:sc.border}}
+          <div className="rev-subj-bar">
+            {subjects.map(s=>{
+              const sc=getSC(s); const st=ms(getSubjQs(s)); const isA=activeSubj===s
+              return(
+                <button key={s} className={`rsb-btn${isA?' on':''}`}
+                  style={isA?{background:sc.grd,color:'white',borderColor:'transparent',boxShadow:`0 4px 16px ${sc.bg}44`}:{color:sc.bg,borderColor:sc.bg+'33'}}
                   onClick={()=>switchSubj(s)}>
+                  <span>{sc.emoji}</span>
                   <span className="rsb-label">{sc.label}</span>
                   <span className="rsb-name">{s}</span>
-                  <span className="rsb-stats">
-                    <span style={{color:isA?'rgba(255,255,255,.8)':RES.correct.color}}>✓{st.correct}</span>
-                    <span style={{color:isA?'rgba(255,255,255,.6)':RES.wrong.color}}>✗{st.wrong}</span>
+                  <span className="rsb-cnt" style={isA?{background:'rgba(255,255,255,.2)'}:{background:sc.light,color:sc.bg}}>
+                    {getSubjQs(s).filter(q=>q.result==='correct').length}/{st.total}
                   </span>
                 </button>
               )
             })}
           </div>
 
-          <div className="review-layout">
-            {/* ── Left sidebar ── */}
-            <div className="review-sidebar">
-              <div className="sidebar-head">
-                QUESTIONS
-                <span className="sidebar-count">{filteredQs.length}/{subjQs.length}</span>
+          <div className="rev-layout">
+            {/* Left nav */}
+            <div className="rev-nav">
+              <div className="rn-head">Questions <span className="rn-cnt">{filteredQs.length}/{subjQs.length}</span></div>
+              {/* Filters */}
+              <div className="rn-filters">
+                {[['all','All',null],['correct','✓',DOT_COLOR.correct],['wrong','✗',DOT_COLOR.wrong],['skipped','↩',DOT_COLOR.skipped],['unattempted','—','#475569']].map(([m,l,c])=>(
+                  <button key={m} className={`rf-btn${filter===m?' on':''}`}
+                    style={filter===m&&c?{background:c,borderColor:c,color:filter==='unattempted'?'white':'#000'}:filter===m?{background:'#6366f1',borderColor:'#6366f1',color:'white'}:{}}
+                    onClick={()=>{setFilter(m);setCurQ(0)}}>{l}</button>
+                ))}
               </div>
-
-              {/* Filter buttons */}
-              <div className="sidebar-filters">
-                {[
-                  ['all','All',null],
-                  ['correct','✓ Correct','#2e7d32'],
-                  ['wrong','✗ Wrong','#c62828'],
-                  ['skipped','↩ Skipped','#e65100'],
-                  ['unattempted','— Not Att.','#757575'],
-                ].map(([m,l,c])=>{
-                  const isA=filter===m
-                  return (
-                    <button key={m} className={`sf-btn${isA?' active':''}`}
-                      style={isA&&c?{background:c,borderColor:c,color:'#fff'}:isA?{background:'#1a237e',borderColor:'#1a237e',color:'#fff'}:{}}
-                      onClick={()=>switchFilter(m)}>{l}</button>
-                  )
-                })}
-              </div>
-
-              {/* Question dots */}
-              <div className="qdot-grid">
-                {filteredQs.map((q,i) => {
-                  const isCur = i===curQ
-                  const dotColor = isCur ? '#1a237e' : (RES[q.result]?.dot || '#bdbdbd')
-                  return (
-                    <div key={i} className={`qdot${isCur?' cur':''}`}
-                      style={{background:dotColor, boxShadow:isCur?`0 0 0 2.5px white, 0 0 0 4px #1a237e`:''}}
-                      onClick={()=>setCurQ(i)}>
-                      {q.qnum||(subjQs.indexOf(q)+1)}
-                    </div>
-                  )
-                })}
-                {filteredQs.length===0 && (
-                  <div style={{gridColumn:'1/-1',textAlign:'center',padding:'20px 0',color:'#aaa',fontSize:'.8rem'}}>
-                    No questions in this filter
+              {/* Dot grid */}
+              <div className="rn-dots">
+                {filteredQs.map((q,i)=>(
+                  <div key={i} className={`rn-dot${i===curQ?' rnd-cur':''}`}
+                    style={{background:i===curQ?'#6366f1':DOT_COLOR[q.result]||'#334155',boxShadow:i===curQ?'0 0 0 2.5px white,0 0 0 4.5px #6366f1':''}}
+                    onClick={()=>setCurQ(i)}>
+                    {q.qnum||(subjQs.indexOf(q)+1)}
                   </div>
-                )}
+                ))}
+                {!filteredQs.length&&<div style={{color:'#475569',fontSize:'.76rem',gridColumn:'1/-1',textAlign:'center',padding:'16px 0'}}>No questions</div>}
               </div>
-
               {/* Legend */}
-              <div className="dot-legend">
+              <div className="rn-legend">
                 {Object.entries(RES).map(([k,v])=>(
-                  <div key={k} className="dl-item">
-                    <div className="dl-dot" style={{background:v.dot}}/>
-                    <span>{v.label}</span>
-                  </div>
+                  <div key={k} className="rnl-item"><div className="rnl-dot" style={{background:DOT_COLOR[k]}}/><span>{v.label}</span></div>
                 ))}
               </div>
             </div>
 
-            {/* ── Right: Question panel ── */}
-            <div className="question-panel">
-              {!curQuestion ? (
-                <div className="no-q">
-                  <div style={{fontSize:'3rem',marginBottom:12}}>🔍</div>
-                  <div style={{fontWeight:600,color:'#555',marginBottom:6}}>No questions to show</div>
-                  <div style={{fontSize:'.82rem',color:'#999'}}>Try changing the filter or select another subject</div>
-                </div>
+            {/* Right: question */}
+            <div className="rev-qpanel">
+              {!curQ2 ? (
+                <div className="rev-empty"><div style={{fontSize:'3rem',marginBottom:12}}>🔍</div><div>Select a question to review</div></div>
               ) : (
                 <>
-                  {/* Q header */}
-                  <div className="qp-header">
-                    <div className="qp-header-left">
-                      <span className="qp-qnum">Q {curQuestion.qnum || (subjQs.indexOf(curQuestion)+1)}</span>
-                      {curQuestion.subject && (
-                        <span className="qp-subj" style={{background:SC(curQuestion.subject).light, color:SC(curQuestion.subject).accent, border:`1px solid ${SC(curQuestion.subject).border}`}}>
-                          {curQuestion.subject}
-                        </span>
-                      )}
-                      <span className={`qp-type ${curQuestion.type==='INTEGER'?'int':'mcq'}`}>
-                        {curQuestion.type==='INTEGER'?'Integer':'MCQ'}
-                      </span>
+                  <div className="rq-header">
+                    <div className="rq-hl">
+                      <span className="rq-qnum">Q {curQ2.qnum||(subjQs.indexOf(curQ2)+1)}</span>
+                      {curQ2.subject&&<span className="rq-subj" style={{background:getSC(curQ2.subject).light,color:getSC(curQ2.subject).bg,border:`1px solid ${getSC(curQ2.subject).dot}44`}}>{getSC(curQ2.subject).emoji} {curQ2.subject}</span>}
+                      <span className={`rq-type ${curQ2.type==='INTEGER'?'int':'mcq'}`}>{curQ2.type==='INTEGER'?'Integer':'MCQ'}</span>
                     </div>
-                    <div className="qp-result" style={{background:RES[curQuestion.result]?.bg, color:RES[curQuestion.result]?.color, border:`1px solid ${RES[curQuestion.result]?.border}`}}>
-                      {RES[curQuestion.result]?.label}
+                    <div className="rq-result" style={{background:RES[curQ2.result]?.bg,color:RES[curQ2.result]?.color,border:`1px solid ${RES[curQ2.result]?.border}`}}>
+                      {RES[curQ2.result]?.label}
                     </div>
                   </div>
 
-                  {/* Question content */}
-                  <div className="qp-body">
-                    {/* Images */}
-                    {curQuestion.images && curQuestion.images.length > 0 ? (
-                      <div className="qp-images">
-                        {curQuestion.images.map((img,i)=>(
-                          <img key={i} src={`data:image/png;base64,${img}`} alt={`Q${curQ+1}`}
-                            style={{maxWidth:'100%',display:'block',margin:'0 auto 6px',borderRadius:4}}/>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="qp-text" dangerouslySetInnerHTML={{__html:(curQuestion.text||'').replace(/\n/g,'<br/>')}}/>
+                  <div className="rq-body">
+                    {curQ2.images&&curQ2.images.length>0?(
+                      <div className="rq-img-wrap">{curQ2.images.map((img,i)=><img key={i} src={`data:image/png;base64,${img}`} alt="" style={{maxWidth:'100%',display:'block',margin:'0 auto 8px',borderRadius:8}}/>)}</div>
+                    ):(
+                      <div className="rq-text" dangerouslySetInnerHTML={{__html:(curQ2.text||'').replace(/\n/g,'<br/>')}}/>
                     )}
 
-                    {/* MCQ options */}
-                    {curQuestion.type==='MCQ' && curQuestion.opts && (
-                      <div className="qp-opts">
+                    {curQ2.type==='MCQ'&&curQ2.opts&&(
+                      <div className="rq-opts">
                         {['A','B','C','D'].map((lbl,i)=>{
-                          const isCorrect = lbl===(curQuestion.correctAnswer||'').toUpperCase().trim()
-                          const isYours   = lbl===(curQuestion.yourAnswer||'').toUpperCase().trim()
-                          return (
-                            <div key={lbl} className={`qp-opt${isCorrect?' correct':isYours&&!isCorrect?' wrong':''}`}>
-                              <div className="qp-opt-lbl">{lbl}</div>
-                              <div className="qp-opt-text">{curQuestion.opts[i]||`Option ${lbl}`}</div>
-                              <div className="qp-opt-tag">
-                                {isCorrect && isYours  && <span className="opt-tag green">✓ Correct Answer</span>}
-                                {isCorrect && !isYours && <span className="opt-tag green">✓ Correct Answer</span>}
-                                {!isCorrect && isYours && <span className="opt-tag red">✗ Your Answer</span>}
+                          const isCor=lbl===(curQ2.correctAnswer||'').toUpperCase().trim()
+                          const isYrs=lbl===(curQ2.yourAnswer||'').toUpperCase().trim()
+                          return(
+                            <div key={lbl} className={`rq-opt${isCor?' rq-cor':isYrs&&!isCor?' rq-wrg':''}`}>
+                              <div className="rq-opt-lbl">{lbl}</div>
+                              <div className="rq-opt-text">{curQ2.opts[i]||`Option ${lbl}`}</div>
+                              <div className="rq-opt-tags">
+                                {isCor&&<span className="rqt green">✓ Correct</span>}
+                                {isYrs&&!isCor&&<span className="rqt red">✗ Your Answer</span>}
+                                {isCor&&isYrs&&<span className="rqt green">✓ Your Answer</span>}
                               </div>
                             </div>
                           )
@@ -396,28 +315,24 @@ export default function Analyser() {
                       </div>
                     )}
 
-                    {/* Integer */}
-                    {curQuestion.type==='INTEGER' && (
-                      <div className="qp-int-box">
-                        <div className="qp-int-row">
-                          <span className="qp-int-lbl">Your answer</span>
-                          <span className="qp-int-val" style={{color:curQuestion.result==='correct'?'#2e7d32':'#c62828',background:curQuestion.result==='correct'?'#e8f5e9':'#ffebee'}}>
-                            {curQuestion.yourAnswer||'Not answered'}
-                          </span>
+                    {curQ2.type==='INTEGER'&&(
+                      <div className="rq-int-box">
+                        <div className="rq-int-row">
+                          <span className="rq-int-lbl">Your answer</span>
+                          <span className="rq-int-val" style={{color:curQ2.result==='correct'?'#15803d':'#b91c1c',background:curQ2.result==='correct'?'#dcfce7':'#fee2e2'}}>{curQ2.yourAnswer||'—'}</span>
                         </div>
-                        <div className="qp-int-row">
-                          <span className="qp-int-lbl">Correct answer</span>
-                          <span className="qp-int-val" style={{color:'#2e7d32',background:'#e8f5e9'}}>{curQuestion.correctAnswer}</span>
+                        <div className="rq-int-row">
+                          <span className="rq-int-lbl">Correct answer</span>
+                          <span className="rq-int-val" style={{color:'#15803d',background:'#dcfce7'}}>{curQ2.correctAnswer}</span>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Navigation */}
-                  <div className="qp-nav">
-                    <button className="qpn-btn" disabled={curQ===0} onClick={()=>setCurQ(c=>c-1)}>← Prev</button>
-                    <span className="qpn-count">{curQ+1} <span style={{color:'#aaa'}}>/</span> {filteredQs.length}</span>
-                    <button className="qpn-btn primary" disabled={curQ>=filteredQs.length-1} onClick={()=>setCurQ(c=>c+1)}>Next →</button>
+                  <div className="rq-nav">
+                    <button className="rqn-btn" disabled={curQ===0} onClick={()=>setCurQ(c=>c-1)}>← Prev</button>
+                    <span className="rqn-count">{curQ+1} <span style={{color:'#475569'}}>/</span> {filteredQs.length}</span>
+                    <button className="rqn-btn primary" disabled={curQ>=filteredQs.length-1} onClick={()=>setCurQ(c=>c+1)}>Next →</button>
                   </div>
                 </>
               )}
@@ -430,172 +345,175 @@ export default function Analyser() {
 }
 
 const BASE_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#f0f2f5;color:#1a1a2e;font-family:'Inter',sans-serif;min-height:100vh}
-@keyframes up{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-.anim{animation:up .35s ease both}
-`
+:root{--bg:#0a0e1a;--s1:#0d1425;--s2:#111827;--card:#141e35;--card2:#1a2540;--border:rgba(99,102,241,.12);--border2:rgba(99,102,241,.2);--text:#f0f4ff;--muted:#475569;--m2:#94a3b8;--accent:#6366f1}
+html,body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{animation:fadeUp .4s ease both}
 
-const UPLOAD_CSS = `
-.upload-page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#1a237e 0%,#283593 40%,#1565c0 100%)}
-.upload-hero{background:white;border-radius:20px;padding:48px 40px;width:100%;max-width:520px;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.25)}
-.upload-logo{font-size:3rem;margin-bottom:16px}
-.upload-hero h1{font-size:1.8rem;font-weight:800;color:#1a237e;margin-bottom:8px}
-.upload-hero p{color:#666;font-size:.9rem;margin-bottom:28px}
-.dropzone{background:#f8faff;border:2.5px dashed #c5cae9;border-radius:14px;padding:40px 24px;cursor:pointer;transition:all .2s;margin-bottom:16px}
-.dropzone:hover,.dropzone.drag{border-color:#1a237e;background:#e8eaf6}
-.dz-icon{font-size:2.4rem;margin-bottom:10px}
-.dz-title{font-size:1rem;font-weight:700;color:#1a237e;margin-bottom:4px}
-.dz-sub{font-size:.78rem;color:#888;margin-bottom:20px}
-.dz-btn{display:inline-block;background:#1a237e;color:white;padding:10px 28px;border-radius:8px;font-weight:700;font-size:.85rem;cursor:pointer}
-.upload-err{background:#ffebee;border:1px solid #ef9a9a;border-radius:8px;padding:12px;font-size:.82rem;color:#c62828;text-align:left;margin-bottom:12px}
-.upload-hint{background:#e8eaf6;border-radius:10px;padding:14px 16px;font-size:.78rem;color:#555;text-align:left;line-height:1.9}
+/* Upload */
+.upload-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(99,102,241,.2),transparent)}
+.upload-card{background:var(--card);border:1px solid var(--border2);border-radius:24px;padding:48px 44px;width:100%;max-width:560px;text-align:center;box-shadow:0 32px 80px rgba(0,0,0,.5)}
+.back-link{display:inline-block;color:var(--m2);font-size:.78rem;text-decoration:none;margin-bottom:28px;opacity:.7}
+.back-link:hover{opacity:1}
+.upload-icon-wrap{width:80px;height:80px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:2.2rem;margin:0 auto 20px;box-shadow:0 8px 32px rgba(99,102,241,.4)}
+.upload-icon{line-height:1}
+.upload-title{font-size:1.8rem;font-weight:900;letter-spacing:-1px;margin-bottom:8px}
+.upload-sub{color:var(--m2);font-size:.88rem;margin-bottom:28px;line-height:1.6}
+.dropzone{background:rgba(99,102,241,.05);border:2px dashed rgba(99,102,241,.25);border-radius:16px;padding:36px 24px;cursor:pointer;transition:all .22s;margin-bottom:16px}
+.dropzone:hover,.dropzone.drag{border-color:#6366f1;background:rgba(99,102,241,.1);box-shadow:0 0 0 4px rgba(99,102,241,.1)}
+.dz-title{font-size:.98rem;font-weight:700;margin-bottom:6px}
+.dz-sub{color:var(--m2);font-size:.78rem;margin-bottom:18px}
+.dz-btn{display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;padding:10px 28px;border-radius:10px;font-weight:700;font-size:.84rem;cursor:pointer;box-shadow:0 4px 16px rgba(99,102,241,.35)}
+.upload-err{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);color:#f87171;padding:12px 16px;border-radius:10px;font-size:.82rem;text-align:left;margin-bottom:12px}
+.upload-steps{display:flex;align-items:center;gap:8px;margin-top:20px;flex-wrap:wrap;justify-content:center}
+.us-step{display:flex;align-items:center;gap:7px;font-size:.76rem;color:var(--m2)}
+.us-n{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;font-size:.64rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.us-arrow{color:var(--muted);font-size:.8rem}
 `
 
 const APP_CSS = `
-/* Top nav */
-.topnav{background:#1a237e;height:58px;display:flex;align-items:center;padding:0 24px;gap:16px;position:sticky;top:0;z-index:100;box-shadow:0 2px 10px rgba(0,0,0,.25)}
-.tz-logo{display:flex;align-items:center;gap:8px;text-decoration:none;flex-shrink:0}
-.tz-mark{width:32px;height:32px;background:#ffeb3b;border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:.8rem;color:#1a237e}
-.tz-name{font-weight:800;font-size:1.05rem;color:white}
-.nav-tabs{display:flex;gap:4px;flex:1;justify-content:center}
-.nav-tab{padding:7px 18px;border-radius:8px;font-family:'Inter',sans-serif;font-weight:600;font-size:.82rem;cursor:pointer;border:none;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);transition:all .15s}
-.nav-tab:hover{background:rgba(255,255,255,.18);color:white}
-.nav-tab.active{background:white;color:#1a237e}
-.nav-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
-.test-name-chip{font-size:.72rem;color:rgba(255,255,255,.75);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.btn-new{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:white;padding:6px 14px;border-radius:7px;font-size:.76rem;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif}
-.btn-new:hover{background:rgba(255,255,255,.25)}
+/* App header */
+.app-header{background:rgba(10,14,26,.9);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;height:58px;display:flex;align-items:center;padding:0 20px}
+.app-header-inner{width:100%;display:flex;align-items:center;gap:12px}
+.app-logo{display:flex;align-items:center;gap:8px;text-decoration:none;flex-shrink:0}
+.al-icon{font-size:1.2rem}
+.al-text{font-size:1rem;color:var(--text)}.al-text b{background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.app-tabs{display:flex;gap:4px;flex:1;justify-content:center}
+.app-tab{padding:7px 18px;border-radius:9px;border:none;background:transparent;color:var(--m2);font-family:'Inter',sans-serif;font-weight:600;font-size:.82rem;cursor:pointer;transition:all .15s}
+.app-tab:hover{background:rgba(255,255,255,.06);color:var(--text)}
+.app-tab.on{background:rgba(99,102,241,.15);color:#818cf8;border:1px solid rgba(99,102,241,.2)}
+.app-header-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.test-chip{font-size:.72rem;color:var(--m2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.new-file-btn{background:rgba(255,255,255,.07);border:1px solid var(--border2);color:var(--m2);padding:5px 12px;border-radius:7px;font-size:.74rem;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif}
+.new-file-btn:hover{color:var(--text);background:rgba(255,255,255,.1)}
 
-/* Overview */
-.page{max-width:1200px;margin:0 auto;padding:24px 20px 80px}
+/* Overview page */
+.a-page{max-width:1200px;margin:0 auto;padding:24px 20px 80px}
 
 /* Score hero */
-.score-hero{background:linear-gradient(135deg,#0d1b4b,#1a237e);border-radius:16px;padding:32px;display:flex;align-items:center;gap:32px;margin-bottom:20px;flex-wrap:wrap}
-.score-hero-left{flex-shrink:0}
-.score-hero-label{font-size:.68rem;text-transform:uppercase;letter-spacing:2px;color:rgba(255,255,255,.6);font-family:'JetBrains Mono',monospace;margin-bottom:4px}
-.score-hero-num{font-family:'JetBrains Mono',monospace;font-size:4rem;font-weight:700;line-height:1}
-.score-hero-max{font-size:1.4rem;color:rgba(255,255,255,.4);font-weight:400}
-.score-hero-sub{font-size:.76rem;color:rgba(255,255,255,.55);margin-top:8px}
-.score-hero-cards{display:flex;gap:10px;flex:1;flex-wrap:wrap}
-.hero-card{border-radius:12px;padding:16px 18px;text-align:center;flex:1;min-width:80px;border:1px solid transparent}
-.hero-card-val{font-family:'JetBrains Mono',monospace;font-size:1.8rem;font-weight:700;margin-bottom:4px}
-.hero-card-lbl{font-size:.6rem;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.5px}
+.score-hero{background:linear-gradient(135deg,#0b1220,#141e35);border:1px solid var(--border);border-radius:20px;overflow:hidden;margin-bottom:20px;position:relative}
+.sh-bg{position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 0% 50%,rgba(99,102,241,.12),transparent);pointer-events:none}
+.sh-content{position:relative;display:flex;align-items:center;gap:24px;padding:28px 32px;flex-wrap:wrap}
+.sh-left{flex-shrink:0}
+.sh-label{font-size:.65rem;text-transform:uppercase;letter-spacing:2px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:4px}
+.sh-score{font-family:'JetBrains Mono',monospace;font-size:3.8rem;font-weight:900;letter-spacing:-3px;line-height:1}
+.sh-max{font-size:1.3rem;color:var(--muted);font-weight:400}
+.sh-meta{display:flex;gap:8px;font-size:.74rem;color:var(--muted);margin-top:8px;align-items:center}
+.sh-cards{display:flex;gap:8px;flex:1;flex-wrap:wrap}
+.sh-card{border-radius:12px;padding:14px 18px;text-align:center;flex:1;min-width:80px}
+.shc-val{font-family:'JetBrains Mono',monospace;font-size:1.7rem;font-weight:800;margin-bottom:4px}
+.shc-lbl{font-size:.58rem;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px}
 
-/* Section card */
-.section-card{background:white;border-radius:14px;overflow:hidden;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,.07)}
-.section-header{padding:18px 22px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between}
-.section-title{font-size:1rem;font-weight:700;color:#1a237e}
+/* Section */
+.a-section{margin-bottom:24px}
+.a-sec-title{font-size:.65rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:2.5px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.a-sec-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent)}
 
 /* Breakdown table */
-.breakdown-table{width:100%}
-.bt-head{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1.5fr;padding:10px 22px;background:#f8f9ff;font-size:.68rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;font-family:'JetBrains Mono',monospace}
-.bt-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1.5fr;padding:14px 22px;border-top:1px solid #f0f0f0;align-items:center;transition:background .12s}
-.bt-row:hover{background:#f8f9ff}
-.bt-overall{background:#fafbff}
+.breakdown-table{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.bt-head{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1.4fr;padding:10px 20px;background:rgba(255,255,255,.03);font-size:.62rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-family:'JetBrains Mono',monospace}
+.bt-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1.4fr;padding:14px 20px;border-top:1px solid var(--border);align-items:center;transition:background .12s}
+.bt-row:hover{background:rgba(255,255,255,.02)}
+.bt-overall{background:rgba(99,102,241,.04)}
 .bt-subj-cell{display:flex;align-items:center;gap:8px}
-.bt-subj-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.bt-subj-name{font-weight:600;font-size:.9rem}
-.bt-subj-badge{font-size:.6rem;font-weight:700;padding:2px 7px;border-radius:10px;font-family:'JetBrains Mono',monospace}
-.bt-big{font-family:'JetBrains Mono',monospace;font-size:1rem;font-weight:700}
-.bt-big.green{color:#2e7d32}.bt-big.red{color:#c62828}.bt-big.gray{color:#888}
-.bt-den{font-size:.72rem;color:#bbb;margin-left:2px}
-.acc-bar-wrap{width:80px;height:5px;background:#eee;border-radius:99px;overflow:hidden;margin-bottom:3px}
-.acc-bar{height:100%;border-radius:99px;transition:width .5s}
-.acc-pct{font-family:'JetBrains Mono',monospace;font-size:.75rem;font-weight:700}
+.bt-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.bt-sbadge{font-size:.58rem;font-weight:800;padding:2px 6px;border-radius:6px;font-family:'JetBrains Mono',monospace}
+.bt-num{font-family:'JetBrains Mono',monospace;font-size:.9rem;font-weight:700}
+.bt-num.green{color:#4ade80}.bt-num.red{color:#f87171}.bt-num.gray{color:#64748b}
+.bt-den{font-size:.68rem;color:var(--muted)}
+.bt-acc-cell{display:flex;align-items:center;gap:8px}
+.bt-acc-bar-w{flex:1;height:4px;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden}
+.bt-acc-bar{height:100%;border-radius:99px}
 
-/* Quick cards grid */
-.quick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
-.quick-card{background:white;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);transition:transform .18s,box-shadow .18s}
-.quick-card:hover{transform:translateY(-3px);box-shadow:0 6px 22px rgba(0,0,0,.12)}
-.qc-top{display:flex;align-items:center;gap:8px;margin-bottom:12px}
-.qc-badge{font-size:.65rem;font-weight:800;padding:3px 9px;border-radius:20px;font-family:'JetBrains Mono',monospace}
-.qc-name{font-weight:700;font-size:.9rem;color:#212121}
-.qc-score{font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:800;margin-bottom:8px}
-.qc-score-s{font-size:.75rem;font-weight:400;color:#888}
-.qc-bar-wrap{height:6px;background:#eee;border-radius:99px;overflow:hidden;margin-bottom:10px}
-.qc-bar{height:100%;border-radius:99px;transition:width .6s}
-.qc-stats{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
-.qc-stat{font-size:.72rem;font-weight:700;font-family:'JetBrains Mono',monospace;padding:2px 8px;border-radius:6px;background:#f5f5f5}
-.qc-stat.green{color:#2e7d32;background:#e8f5e9}
-.qc-stat.red{color:#c62828;background:#ffebee}
-.qc-stat.orange{color:#e65100;background:#fff3e0}
-.qc-stat.gray{color:#888;background:#f5f5f5}
-.qc-review-btn{width:100%;padding:9px;border:none;border-radius:8px;color:white;font-family:'Inter',sans-serif;font-weight:700;font-size:.8rem;cursor:pointer;transition:opacity .15s}
-.qc-review-btn:hover{opacity:.88}
+/* Subject cards */
+.subj-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.scard{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;transition:all .2s;position:relative;overflow:hidden}
+.scard::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--sg)}
+.scard:hover{transform:translateY(-4px);border-color:var(--border2);box-shadow:0 16px 48px rgba(0,0,0,.4)}
+.scard-top{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.scard-emoji{font-size:1.6rem}
+.scard-badge{font-size:.62rem;font-weight:800;padding:2px 8px;border-radius:20px;font-family:'JetBrains Mono',monospace;margin-bottom:3px;display:inline-block}
+.scard-name{font-size:.82rem;font-weight:700;color:var(--m2)}
+.scard-score{border-radius:10px;padding:12px 14px;text-align:center;margin-bottom:12px}
+.scard-score-n{font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:900;line-height:1}
+.scard-score-l{font-size:.62rem;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.scard-bar-wrap{height:5px;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden;margin-bottom:10px}
+.scard-bar{height:100%;border-radius:99px;transition:width .6s}
+.scard-stats{display:flex;gap:10px;font-family:'JetBrains Mono',monospace;font-size:.74rem;font-weight:700;margin-bottom:14px;flex-wrap:wrap}
+.scard-btn{width:100%;padding:10px;border:none;border-radius:9px;color:white;font-family:'Inter',sans-serif;font-weight:700;font-size:.8rem;cursor:pointer;background:var(--sg);transition:all .15s}
+.scard-btn:hover{opacity:.88;transform:translateY(-1px)}
 
-/* Review page */
-.review-page{padding:0 0 80px}
-.review-subj-bar{background:white;border-bottom:1px solid #e8e8e8;padding:0 24px;display:flex;gap:8px;overflow-x:auto;box-shadow:0 2px 6px rgba(0,0,0,.06)}
-.rsb-tab{display:flex;align-items:center;gap:8px;padding:14px 18px;border:none;border-bottom:3px solid transparent;background:transparent;cursor:pointer;font-family:'Inter',sans-serif;font-size:.82rem;font-weight:600;white-space:nowrap;transition:all .15s;color:#666;margin-bottom:-1px}
-.rsb-tab:hover{color:#1a237e;border-bottom-color:#c5cae9}
-.rsb-tab.active{border-radius:10px 10px 0 0;border-bottom:3px solid transparent;margin-bottom:-3px}
-.rsb-label{font-family:'JetBrains Mono',monospace;font-size:.65rem;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.08)}
-.rsb-tab.active .rsb-label{background:rgba(255,255,255,.25)}
-.rsb-stats{display:flex;gap:5px;font-family:'JetBrains Mono',monospace;font-size:.65rem;font-weight:700}
+/* Review shell */
+.review-shell{display:flex;flex-direction:column;height:calc(100vh - 58px)}
+.rev-subj-bar{background:rgba(10,14,26,.95);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;gap:6px;overflow-x:auto;flex-shrink:0}
+.rsb-btn{display:flex;align-items:center;gap:7px;padding:8px 16px;border-radius:10px;border:1.5px solid;background:transparent;cursor:pointer;font-family:'Inter',sans-serif;font-size:.78rem;font-weight:600;white-space:nowrap;transition:all .18s;flex-shrink:0}
+.rsb-label{font-family:'JetBrains Mono',monospace;font-size:.65rem;font-weight:800}
+.rsb-cnt{font-family:'JetBrains Mono',monospace;font-size:.62rem;font-weight:700;padding:2px 7px;border-radius:20px}
 
 /* Review layout */
-.review-layout{display:flex;align-items:flex-start;gap:0;max-height:calc(100vh - 118px)}
+.rev-layout{display:flex;flex:1;overflow:hidden;min-height:0}
+.rev-nav{width:220px;flex-shrink:0;background:var(--s1);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.rn-head{padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:.62rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.rn-cnt{color:var(--accent);font-weight:400}
+.rn-filters{padding:8px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);flex-shrink:0}
+.rf-btn{padding:7px 10px;border-radius:7px;font-size:.76rem;font-weight:600;cursor:pointer;border:1.5px solid rgba(255,255,255,.08);background:transparent;color:var(--m2);font-family:'Inter',sans-serif;text-align:left;transition:all .12s}
+.rf-btn:hover{background:rgba(255,255,255,.05);color:var(--text)}
+.rf-btn.on{}
+.rn-dots{padding:10px;display:grid;grid-template-columns:repeat(5,1fr);gap:4px;overflow-y:auto;flex:1}
+.rn-dot{height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:.58rem;font-weight:800;cursor:pointer;color:white;transition:all .12s}
+.rn-dot:hover{transform:scale(1.08)}
+.rnd-cur{}
+.rn-legend{padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0}
+.rnl-item{display:flex;align-items:center;gap:6px;font-size:.62rem;color:var(--muted);margin-bottom:5px}
+.rnl-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
 
-/* Sidebar */
-.review-sidebar{width:230px;flex-shrink:0;background:white;border-right:1px solid #e8e8e8;height:calc(100vh - 118px);overflow-y:auto;display:flex;flex-direction:column}
-.sidebar-head{padding:12px 14px;font-size:.65rem;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:2px;font-family:'JetBrains Mono',monospace;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:white;z-index:10}
-.sidebar-count{font-weight:400;color:#bbb}
-.sidebar-filters{padding:8px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #f0f0f0}
-.sf-btn{padding:6px 10px;border-radius:6px;font-size:.74rem;font-weight:600;cursor:pointer;border:1.5px solid #e0e0e0;background:white;color:#555;font-family:'Inter',sans-serif;text-align:left;transition:all .12s}
-.sf-btn:hover{border-color:#1a237e;color:#1a237e}
-.sf-btn.active{color:white}
-.qdot-grid{padding:10px;display:grid;grid-template-columns:repeat(5,1fr);gap:4px;flex:1}
-.qdot{height:32px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:.6rem;font-weight:700;cursor:pointer;color:white;transition:transform .1s,box-shadow .1s}
-.qdot:hover{transform:scale(1.1)}
-.dot-legend{padding:10px 12px;border-top:1px solid #f0f0f0;display:flex;flex-direction:column;gap:5px;font-size:.65rem;color:#666}
-.dl-item{display:flex;align-items:center;gap:6px}
-.dl-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
-
-/* Question panel */
-.question-panel{flex:1;background:#f8f9ff;height:calc(100vh - 118px);overflow-y:auto;padding:24px 28px}
-.no-q{display:flex;flex-direction:column;align-items:center;justify-content:center;height:60%;color:#888;text-align:center}
-.qp-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
-.qp-header-left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.qp-qnum{font-family:'JetBrains Mono',monospace;font-size:.85rem;font-weight:700;background:white;border:1.5px solid #e0e0e0;padding:4px 12px;border-radius:6px;color:#333}
-.qp-subj{font-size:.72rem;font-weight:700;padding:4px 11px;border-radius:20px;font-family:'JetBrains Mono',monospace}
-.qp-type{font-size:.65rem;font-weight:700;padding:3px 9px;border-radius:20px;font-family:'JetBrains Mono',monospace}
-.qp-type.mcq{background:#e3f2fd;color:#1565c0;border:1px solid #90caf9}
-.qp-type.int{background:#fff3e0;color:#e65100;border:1px solid #ffcc80}
-.qp-result{font-size:.8rem;font-weight:700;padding:6px 14px;border-radius:20px}
-.qp-body{background:white;border-radius:14px;padding:22px;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:14px}
-.qp-images{text-align:center;margin-bottom:16px}
-.qp-text{font-size:.95rem;line-height:1.9;color:#212121;white-space:pre-wrap;min-height:48px}
-.qp-opts{display:flex;flex-direction:column;gap:10px;margin-top:18px}
-.qp-opt{display:flex;align-items:flex-start;gap:12px;border:2px solid #e8e8e8;border-radius:10px;padding:13px 16px;background:#fafafa;transition:all .12s}
-.qp-opt.correct{border-color:#2e7d32;background:#f1f8f3}
-.qp-opt.wrong{border-color:#c62828;background:#fff5f5}
-.qp-opt-lbl{font-family:'JetBrains Mono',monospace;font-size:.75rem;font-weight:700;min-width:28px;height:28px;border-radius:6px;background:#e8e8e8;color:#555;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.qp-opt.correct .qp-opt-lbl{background:#2e7d32;color:white}
-.qp-opt.wrong .qp-opt-lbl{background:#c62828;color:white}
-.qp-opt-text{flex:1;font-size:.9rem;color:#212121;line-height:1.65;padding-top:3px}
-.qp-opt-tag{flex-shrink:0;display:flex;gap:4px;align-items:flex-start;padding-top:3px}
-.opt-tag{font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap}
-.opt-tag.green{background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7}
-.opt-tag.red{background:#ffebee;color:#c62828;border:1px solid #ef9a9a}
-.qp-int-box{margin-top:18px;background:#f8f9ff;border-radius:10px;overflow:hidden;border:1px solid #e0e0e0}
-.qp-int-row{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid #eee}
-.qp-int-row:last-child{border-bottom:none}
-.qp-int-lbl{font-size:.8rem;color:#666;flex:1}
-.qp-int-val{font-family:'JetBrains Mono',monospace;font-size:1.2rem;font-weight:700;padding:4px 16px;border-radius:8px}
-.qp-nav{display:flex;align-items:center;justify-content:space-between;background:white;border-radius:12px;padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-.qpn-btn{padding:9px 22px;border-radius:8px;font-family:'Inter',sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;border:1.5px solid #ddd;background:white;color:#333;transition:all .15s}
-.qpn-btn:hover:not(:disabled){border-color:#1a237e;color:#1a237e}
-.qpn-btn.primary{background:#1a237e;color:white;border-color:#1a237e}
-.qpn-btn.primary:hover:not(:disabled){background:#283593}
-.qpn-btn:disabled{opacity:.35;cursor:not-allowed}
-.qpn-count{font-family:'JetBrains Mono',monospace;font-size:.88rem;color:#555;font-weight:700}
+/* Right question panel - WHITE */
+.rev-qpanel{flex:1;background:white;color:#1a1a2e;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:16px}
+.rev-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94a3b8;text-align:center;font-size:.88rem}
+.rq-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.rq-hl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rq-qnum{font-family:'JetBrains Mono',monospace;font-size:.82rem;font-weight:700;background:#f0f2ff;border:1.5px solid #c7d2fe;color:#3730a3;padding:4px 12px;border-radius:8px}
+.rq-subj{font-size:.72rem;font-weight:700;padding:4px 11px;border-radius:20px;font-family:'JetBrains Mono',monospace}
+.rq-type{font-size:.64rem;font-weight:800;padding:3px 9px;border-radius:20px;font-family:'JetBrains Mono',monospace}
+.rq-type.mcq{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd}
+.rq-type.int{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
+.rq-result{font-size:.78rem;font-weight:700;padding:5px 14px;border-radius:20px}
+.rq-body{background:#fafbff;border:1px solid #e8eaf6;border-radius:14px;padding:20px}
+.rq-img-wrap{text-align:center}
+.rq-text{font-size:.95rem;line-height:1.9;color:#1a1a2e;white-space:pre-wrap}
+.rq-opts{display:flex;flex-direction:column;gap:9px;margin-top:16px}
+.rq-opt{display:flex;align-items:flex-start;gap:12px;border:2px solid #e8eaf6;border-radius:12px;padding:13px 16px;background:white;transition:all .12s}
+.rq-cor{border-color:#16a34a!important;background:#f0fdf4!important}
+.rq-wrg{border-color:#dc2626!important;background:#fef2f2!important}
+.rq-opt-lbl{width:30px;height:30px;border-radius:8px;background:#f0f2ff;border:1.5px solid #c7d2fe;color:#4338ca;font-family:'JetBrains Mono',monospace;font-size:.75rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rq-cor .rq-opt-lbl{background:#16a34a;border-color:#16a34a;color:white}
+.rq-wrg .rq-opt-lbl{background:#dc2626;border-color:#dc2626;color:white}
+.rq-opt-text{flex:1;font-size:.9rem;color:#1a1a2e;line-height:1.65;padding-top:3px}
+.rq-opt-tags{flex-shrink:0;display:flex;flex-direction:column;gap:3px;align-items:flex-end;padding-top:3px}
+.rqt{font-size:.62rem;font-weight:800;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.rqt.green{background:#dcfce7;color:#15803d;border:1px solid #86efac}
+.rqt.red{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5}
+.rq-int-box{margin-top:16px;background:#f8f9ff;border-radius:12px;overflow:hidden;border:1px solid #e8eaf6}
+.rq-int-row{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid #eee}
+.rq-int-row:last-child{border-bottom:none}
+.rq-int-lbl{font-size:.8rem;color:#666;flex:1}
+.rq-int-val{font-family:'JetBrains Mono',monospace;font-size:1.2rem;font-weight:800;padding:6px 18px;border-radius:8px}
+.rq-nav{display:flex;align-items:center;justify-content:space-between;background:white;border-top:1px solid #f0f0f0;padding-top:14px;margin-top:auto}
+.rqn-btn{padding:10px 24px;border-radius:9px;border:1.5px solid #e0e4ff;background:white;color:#3730a3;font-family:'Inter',sans-serif;font-weight:700;font-size:.82rem;cursor:pointer;transition:all .15s}
+.rqn-btn:hover:not(:disabled){background:#eef2ff;border-color:#818cf8}
+.rqn-btn.primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;border-color:transparent;box-shadow:0 4px 14px rgba(99,102,241,.3)}
+.rqn-btn.primary:hover:not(:disabled){opacity:.9}
+.rqn-btn:disabled{opacity:.3;cursor:not-allowed}
+.rqn-count{font-family:'JetBrains Mono',monospace;font-size:.86rem;color:#475569;font-weight:700}
 @media(max-width:768px){
-  .review-sidebar{width:180px}
-  .qdot-grid{grid-template-columns:repeat(4,1fr)}
-  .score-hero{flex-direction:column}
+  .rev-layout{flex-direction:column}
+  .rev-nav{width:100%;max-height:220px;border-right:none;border-bottom:1px solid var(--border)}
+  .rn-dots{grid-template-columns:repeat(8,1fr)}
+  .sh-cards{justify-content:center}
   .bt-head,.bt-row{grid-template-columns:2fr 1fr 1fr 1fr}
   .bt-head>:nth-child(5),.bt-row>:nth-child(5),.bt-head>:last-child,.bt-row>:last-child{display:none}
-  .question-panel{padding:16px}
 }
 `

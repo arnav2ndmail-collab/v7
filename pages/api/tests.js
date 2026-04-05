@@ -4,7 +4,7 @@ import { isDBAvailable, dbGet } from '../../lib/db'
 
 function scan(dir, base, out = []) {
   if (!fs.existsSync(dir)) return out
-  for (const item of fs.readdirSync(dir).sort()) {
+  for (const item of fs.readdirSync(dir).sort((a,b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'}))) {
     const full = path.join(dir, item)
     const stat = fs.statSync(full)
     if (stat.isDirectory()) { scan(full, base, out); continue }
@@ -44,9 +44,17 @@ function buildTree(tests) {
       tree.folders[folder].tests.push(t)
     }
   }
-  tree.tests.sort((a,b) => (a.order??999)-(b.order??999))
+  tree.tests.sort((a,b) => {
+    const od = (a.order??999)-(b.order??999)
+    if (od !== 0) return od
+    return a.title.localeCompare(b.title, undefined, {numeric:true, sensitivity:'base'})
+  })
   for (const f of Object.values(tree.folders)) {
-    f.tests.sort((a,b) => (a.order??999)-(b.order??999))
+    f.tests.sort((a,b) => {
+      const od = (a.order??999)-(b.order??999)
+      if (od !== 0) return od
+      return a.title.localeCompare(b.title, undefined, {numeric:true, sensitivity:'base'})
+    })
   }
   return tree
 }

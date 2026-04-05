@@ -114,23 +114,19 @@ export default function TestZyro() {
     })
   }, [cur])
 
-  // Mark current as visited when navigating away
   const markVisited = useCallback((idx) => {
     setVisited(prev => { const v=[...prev]; v[idx]=true; return v })
   }, [])
 
-  // Save & Next — clears mark, sets answer, moves next
   const saveAndNext = () => {
     markVisited(cur)
-    setMarked(prev => { const m=[...prev]; m[cur]=false; return m }) // unmark → green
+    setMarked(prev => { const m=[...prev]; m[cur]=false; return m })
     if (cur < Qs.length-1) setCur(c=>c+1)
   }
 
-  // Mark for Review & Next
   const markForReview = () => {
     markVisited(cur)
     setMarked(prev => { const m=[...prev]; m[cur]=true; return m })
-    // if no answer, set as 'skip' so it's not untouched
     if (!ans[cur] || ans[cur] === 'skip') setAnswer('skip')
     if (cur < Qs.length-1) setCur(c=>c+1)
   }
@@ -140,7 +136,6 @@ export default function TestZyro() {
     setMarked(prev => { const m=[...prev]; m[cur]=false; return m })
   }
 
-  // Navigate — mark current as visited
   const goTo = (idx) => {
     markVisited(cur)
     setCur(idx)
@@ -213,27 +208,24 @@ export default function TestZyro() {
   const q = Qs[cur]
   const ua = ans[cur]
   const ak = (q?.ans||'').toUpperCase().trim()
-  // dot state helper — 5 visual states matching real BITSAT/NTA
-  // 🔴 red       = visited, no answer, no mark (skipped)
-  // 🟢 green     = answered, not marked
-  // 🟣 purple    = marked for review, no answer
-  // 🟣+▸ purple  = marked for review + answered
-  // ⬜ grey      = not yet visited
+
   const getDotState = (i) => {
     const a = ans[i]; const m = marked[i]; const v = visited[i] || i === 0
     const hasAns = a && a !== 'skip'
-    if (hasAns && m)  return 'answered-marked'   // purple + arrow
-    if (hasAns)       return 'answered'           // green
-    if (m)            return 'marked-only'        // purple (no answer)
-    if (v || a === 'skip') return 'skipped'       // red (visited but no answer)
-    return 'untouched'                            // grey
+    if (hasAns && m)  return 'answered-marked'
+    if (hasAns)       return 'answered'
+    if (m)            return 'marked-only'
+    if (v || a === 'skip') return 'skipped'
+    return 'untouched'
   }
+
   const stats = {
-    a:  Qs.filter((_,i) => { const s=getDotState(i); return s==='answered' }).length,
-    am: Qs.filter((_,i) => { const s=getDotState(i); return s==='answered-marked' }).length,
+    a:  Qs.filter((_,i) => getDotState(i)==='answered').length,
+    am: Qs.filter((_,i) => getDotState(i)==='answered-marked').length,
     s:  Qs.filter((_,i) => { const s=getDotState(i); return s==='skipped'||s==='marked-only' }).length,
     r:  Qs.filter((_,i) => getDotState(i)==='untouched').length
   }
+
   const optCls = (lbl) => {
     const sel = ua===lbl
     if (reviewing) return lbl===ak?'opt cor':sel?'opt wrg':'opt'
@@ -391,7 +383,6 @@ export default function TestZyro() {
                     style={isActive?{background:sc.bg,color:'#fff',borderColor:sc.bg}:{}}
                     onClick={()=>{
                       setActiveNavSubj(s)
-                      // Jump to first question of this subject
                       const firstIdx = subjGroups[s]?.[0]
                       if (firstIdx !== undefined) goTo(firstIdx)
                     }}>
@@ -681,8 +672,6 @@ body{background:#f5f5f5;color:#212121;font-family:'Roboto',sans-serif;min-height
 .info-card{background:white;border:1px solid #e0e0e0;border-radius:8px;padding:16px}
 .info-card-title{font-size:.75rem;font-weight:700;color:#555;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-family:'Roboto Mono',monospace}
 .code-block{background:#f5f5f5;border-radius:6px;padding:14px;font-size:.72rem;color:#1b5e20;overflow-x:auto;font-family:'Roboto Mono',monospace;line-height:1.7}
-
-/* CBT */
 .cbt-app{position:fixed;inset:0;z-index:500;background:#f5f5f5;display:flex;flex-direction:column}
 .cbt-top{background:white;border-bottom:2px solid #e0e0e0;padding:8px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:10px;box-shadow:0 2px 4px rgba(0,0,0,.08)}
 .cbt-test-title{font-weight:700;font-size:.95rem;color:#1a237e}
@@ -700,8 +689,6 @@ body{background:#f5f5f5;color:#212121;font-family:'Roboto',sans-serif;min-height
 .subj-tab-name{font-size:.78rem}
 .subj-tab-count{font-family:'Roboto Mono',monospace;font-size:.65rem;background:rgba(0,0,0,.12);padding:1px 6px;border-radius:10px}
 .cbt-body{display:flex;flex:1;overflow:hidden;min-height:0}
-
-/* WHITE question panel */
 .qpanel{flex:1;padding:20px 24px;overflow-y:auto;background:white;border-right:1px solid #e0e0e0}
 .section-banner{padding:8px 14px;border-radius:6px;border:1px solid;margin-bottom:14px;font-size:.82rem;display:flex;align-items:center;gap:10px}
 .type-badge{font-size:.65rem;font-weight:700;font-family:'Roboto Mono',monospace;padding:2px 8px;border-radius:20px}
@@ -746,12 +733,10 @@ body{background:#f5f5f5;color:#212121;font-family:'Roboto',sans-serif;min-height
 .leg-dot.marked-only{background:#7b1fa2}
 .leg-dot.answered-marked{background:#7b1fa2;outline:2px solid #2e7d32;outline-offset:1px}
 .leg-dot.untouched{background:#e0e0e0;border:1px solid #ccc}
-.leg-dot.current{background:#1a237e}
 .sb-stats-row{display:flex;padding:8px 12px;gap:8px;border-bottom:1px solid #e0e0e0;background:white}
 .sb-stat{display:flex;flex-direction:column;align-items:center;flex:1}
 .sb-stat-n{font-family:'Roboto Mono',monospace;font-size:1.1rem;font-weight:700}
-.sb-stat-n.green{color:#2e7d32}.sb-stat-n.orange{color:#e65100}.sb-stat-n.gray{color:#888}
-.sb-stat-n.red{color:#c62828}.sb-stat-n.purple{color:#7b1fa2}
+.sb-stat-n.green{color:#2e7d32}.sb-stat-n.red{color:#c62828}.sb-stat-n.gray{color:#888}.sb-stat-n.purple{color:#7b1fa2}
 .sb-stat-l{font-size:.58rem;color:#888;text-transform:uppercase;font-family:'Roboto Mono',monospace}
 .sb-sections{flex:1;overflow-y:auto}
 .sb-section{border-bottom:1px solid #e0e0e0}
