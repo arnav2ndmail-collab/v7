@@ -3,7 +3,8 @@ import Head from 'next/head'
 
 const pad = n => String(n).padStart(2,'0')
 const fmt = s => `${pad(Math.floor(s/3600))}:${pad(Math.floor((s%3600)/60))}:${pad(s%60)}`
-const SAVED_KEY = 'tz_saved_v3'
+const SAVED_KEY  = 'tz_saved_v3'
+const RESUME_KEY = 'tz_resume_v1'  // auto-saved in-progress test
 
 const BITSAT_SUBJECTS = ['Physics','Chemistry','Maths','English & LR']
 const SUBJECT_COLORS = {
@@ -37,12 +38,26 @@ export default function TestZyro() {
   const [result, setResult] = useState(null)
   const [activeNavSubj, setActiveNavSubj] = useState(null)
   const [uploadMsg, setUploadMsg] = useState('')
+  const [resumeData, setResumeData] = useState(null) // saved in-progress test
   const timerRef = useRef(null)
   const startRef = useRef(null)
   const cbtAns = useRef([])
 
   useEffect(() => {
     setSavedTests(JSON.parse(localStorage.getItem(SAVED_KEY)||'[]'))
+    // Check for a resumable test
+    try {
+      const saved = localStorage.getItem(RESUME_KEY)
+      if (saved) {
+        const rd = JSON.parse(saved)
+        // Only show resume if it was saved less than 4 hours ago
+        if (rd && rd.savedAt && Date.now() - rd.savedAt < 4*60*60*1000) {
+          setResumeData(rd)
+        } else {
+          localStorage.removeItem(RESUME_KEY)
+        }
+      }
+    } catch(e) {}
     loadTree()
   }, [])
 
@@ -101,10 +116,63 @@ export default function TestZyro() {
     return () => clearInterval(timerRef.current)
   }, [cbtOn, done])
 
+  // Auto-save progress every 10 seconds + on window close
+  const saveProgress = useCallback(() => {
+    if (!cbtOn || done || !Qs.length) return
+    try {
+      const saveData = {
+        cfg, Qs, ans: cbtAns.current, marked, visited,
+        cur, secs: secs,
+        elapsed: Math.round((Date.now() - startRef.current) / 1000),
+        savedAt: Date.now()
+      }
+      localStorage.setItem(RESUME_KEY, JSON.stringify(saveData))
+    } catch(e) {}
+  }, [cbtOn, done, Qs, cfg, marked, visited, cur, secs])
+
+  useEffect(() => {
+    if (!cbtOn || done) return
+    const interval = setInterval(saveProgress, 10000) // every 10s
+    window.addEventListener('beforeunload', saveProgress)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('beforeunload', saveProgress)
+    }
+  }, [cbtOn, done, saveProgress])
+
   const exitCBT = () => {
-    if (!confirm('Exit? Progress will be lost.')) return
+    if (!confirm('Exit? Progress is auto-saved — you can resume later.')) return
     clearInterval(timerRef.current)
+    saveProgress() // save before exit
     setCbtOn(false); setResult(null)
+  }
+
+  // Resume a saved test
+  const resumeTest = (rd) => {
+    setQs(rd.Qs); setCfg(rd.cfg)
+    setAns(rd.ans); cbtAns.current = rd.ans
+    setMarked(rd.marked || new Array(rd.Qs.length).fill(false))
+    setVisited(rd.visited || new Array(rd.Qs.length).fill(false))
+    setCur(rd.cur || 0)
+    setDone(false); setReviewing(false); setResult(null)
+    // Restore remaining time
+    const remainingSecs = Math.max(0, (rd.cfg.dur * 60) - rd.elapsed)
+    setSecs(remainingSecs)
+    if (isBITSAT(rd.cfg.subject||'')) {
+      const firstSubj = rd.Qs[rd.cur||0]?.subject || BITSAT_SUBJECTS[0]
+      setActiveNavSubj(firstSubj)
+    } else {
+      setActiveNavSubj(null)
+    }
+    setCbtOn(true)
+    startRef.current = Date.now() - (rd.elapsed * 1000)
+    clearInterval(timerRef.current)
+    setResumeData(null)
+  }
+
+  const discardResume = () => {
+    localStorage.removeItem(RESUME_KEY)
+    setResumeData(null)
   }
 
   const setAnswer = useCallback((val) => {
@@ -163,6 +231,8 @@ export default function TestZyro() {
     const max = Qs.length*(cfg.mCor||3)
     setResult({ cor,wrg,skp,un,score,max,elapsed,pct:Math.round(cor/Qs.length*100),answers:finalAns,subjStats })
     setDone(true)
+    // Clear saved progress
+    try { localStorage.removeItem(RESUME_KEY) } catch(e) {}
   }, [Qs, cfg])
 
   const downloadOutputFile = (res) => {
@@ -310,6 +380,32 @@ export default function TestZyro() {
       {page==='library' && (
         <div className="wrap anim">
           {uploadMsg && <div className="flash-msg">{uploadMsg}</div>}
+
+          {/* ── Resume banner ── */}
+          {resumeData && (
+            <div className="resume-banner">
+              <div className="resume-banner-left">
+                <div className="resume-icon">⏸️</div>
+                <div>
+                  <div className="resume-title">Unfinished Test Found</div>
+                  <div className="resume-meta">
+                    <strong>{resumeData.cfg?.title}</strong>
+                    &nbsp;·&nbsp;
+                    {resumeData.ans?.filter(a=>a&&a!=='skip').length||0} answered
+                    &nbsp;·&nbsp;
+                    {fmt(Math.max(0,(resumeData.cfg?.dur*60||0)-resumeData.elapsed))} remaining
+                    &nbsp;·&nbsp;
+                    Saved {Math.round((Date.now()-resumeData.savedAt)/60000)} min ago
+                  </div>
+                </div>
+              </div>
+              <div className="resume-banner-right">
+                <button className="resume-btn" onClick={()=>resumeTest(resumeData)}>▶ Resume Test</button>
+                <button className="discard-btn" onClick={discardResume}>✕ Discard</button>
+              </div>
+            </div>
+          )}
+
           <div className="page-top">
             <div><h2>📚 Test Library</h2><p>BITSAT Full Mock Tests — CBT mode</p></div>
             <button className="btn-sm" onClick={loadTree}>🔄 Refresh</button>
@@ -368,7 +464,7 @@ export default function TestZyro() {
             <div className="cbt-top-right">
               <div className={`cbt-timer${secs<=300?' warn':''}`}>⏱ Time Left: <strong>{fmt(secs)}</strong></div>
               <button className="cbt-submit-btn" onClick={()=>doSubmit()}>Submit Test</button>
-              <button className="cbt-exit-btn" onClick={exitCBT}>✕ Exit</button>
+              <button className="cbt-exit-btn" title="Progress auto-saved — resume anytime" onClick={exitCBT}>⏸ Save & Exit</button>
             </div>
           </div>
 
@@ -652,6 +748,17 @@ body{background:#f5f5f5;color:#212121;font-family:'Roboto',sans-serif;min-height
 .loading-txt{color:#888;font-size:.82rem;padding:16px 0}
 .test-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
 .flash-msg{background:#e8f5e9;border:1px solid #4caf50;color:#1b5e20;padding:10px 16px;border-radius:6px;margin-bottom:14px;font-size:.83rem;font-weight:500}
+.resume-banner{background:linear-gradient(135deg,#1a237e,#283593);border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:0 4px 16px rgba(26,35,126,.3);animation:pulse-border 2s ease infinite}
+@keyframes pulse-border{0%,100%{box-shadow:0 4px 16px rgba(26,35,126,.3)}50%{box-shadow:0 4px 24px rgba(26,35,126,.55)}}
+.resume-banner-left{display:flex;align-items:center;gap:12px;flex:1}
+.resume-icon{font-size:1.8rem}
+.resume-title{font-weight:700;font-size:.92rem;color:white;margin-bottom:3px}
+.resume-meta{font-size:.72rem;color:rgba(255,255,255,.75);font-family:'Roboto Mono',monospace}
+.resume-banner-right{display:flex;gap:8px;flex-shrink:0}
+.resume-btn{background:#ffeb3b;color:#1a237e;border:none;padding:9px 20px;border-radius:6px;font-family:'Roboto',sans-serif;font-weight:700;font-size:.82rem;cursor:pointer;transition:all .15s}
+.resume-btn:hover{background:#ffd600;transform:translateY(-1px)}
+.discard-btn{background:rgba(255,255,255,.12);color:rgba(255,255,255,.8);border:1px solid rgba(255,255,255,.25);padding:8px 14px;border-radius:6px;font-family:'Roboto',sans-serif;font-size:.78rem;cursor:pointer}
+.discard-btn:hover{background:rgba(255,255,255,.2)}
 .tc{background:white;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;transition:all .18s;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .tc:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.12)}
 .tc-badge{font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:20px;font-family:'Roboto Mono',monospace}
