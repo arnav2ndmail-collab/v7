@@ -2,8 +2,20 @@ import { useState, useEffect, useRef } from 'react'
 import Head from 'next/head'
 
 const ADM_KEY = 'tz_adm_tok'
-const SUBJ_ORDER = ['Physics','Chemistry','Maths','English & LR']
+const SUBJ_ORDER = ['Physics','Chemistry','Maths','Mathematics','English & LR']
 const OPT_MAP = {'1':'A','2':'B','3':'C','4':'D'}
+
+// Normalize subject names so the CBT navigator works correctly
+const SUBJ_NORMALIZE = {
+  'Mathematics': 'Maths',
+  'Math':        'Maths',
+  'English':     'English & LR',
+  'English & Logical Reasoning': 'English & LR',
+}
+const normalizeSubj = s => SUBJ_NORMALIZE[s] || s
+
+// Preferred display order in CBT
+const DISPLAY_ORDER = ['Physics','Chemistry','Maths','English & LR']
 
 // Load JSZip from CDN
 async function loadJSZip() {
@@ -60,9 +72,28 @@ async function processBitsatZip(file, testName, onProgress) {
   const questions = []
   let globalQnum = 0
 
-  for (const subj of SUBJ_ORDER) {
-    if (!pcd[subj]) continue
+  // Build ordered subject list: use DISPLAY_ORDER preference, then any remaining from pcd
+  const pcdSubjects = Object.keys(pcd)
+  const orderedSubjects = [
+    ...DISPLAY_ORDER.filter(s => pcdSubjects.includes(s) || pcdSubjects.includes(Object.keys(SUBJ_NORMALIZE).find(k => SUBJ_NORMALIZE[k]===s))),
+    ...pcdSubjects.filter(s => {
+      const norm = normalizeSubj(s)
+      return !DISPLAY_ORDER.includes(norm) && !DISPLAY_ORDER.includes(s)
+    })
+  ]
+  // Actually just use pcd keys directly in display order
+  const finalOrder = [
+    ...pcdSubjects.filter(s => ['Physics'].includes(s)),
+    ...pcdSubjects.filter(s => ['Chemistry'].includes(s)),
+    ...pcdSubjects.filter(s => ['Maths','Mathematics','Math'].includes(s)),
+    ...pcdSubjects.filter(s => ['English & LR','English','English & Logical Reasoning'].includes(s)),
+    ...pcdSubjects.filter(s => !['Physics','Chemistry','Maths','Mathematics','Math','English & LR','English','English & Logical Reasoning'].includes(s)),
+  ]
+
+  for (const subj of finalOrder) {
     const subjData = pcd[subj]
+    const normalizedSubj = normalizeSubj(subj)  // e.g. Mathematics → Maths
+
     for (const [sectionName, sectionQs] of Object.entries(subjData)) {
       const ansSection = (ak[subj] || {})[sectionName] || {}
       const sortedKeys = Object.keys(sectionQs).sort((a,b) => parseInt(a)-parseInt(b))
@@ -72,18 +103,20 @@ async function processBitsatZip(file, testName, onProgress) {
         const ansNum = String(ansSection[qnumStr] || '')
         const ansLetter = OPT_MAP[ansNum] || ansNum
 
-        // Collect images: Subject__--__localQnum__--__1, __--__2, etc.
+        // Collect images: try original subject name AND normalized name
         const images = []
         for (let i = 1; i <= 10; i++) {
-          const key = `${subj}__--__${qnumStr}__--__${i}`
-          if (imageMap[key]) images.push(imageMap[key])
+          const key1 = `${subj}__--__${qnumStr}__--__${i}`
+          const key2 = `${normalizedSubj}__--__${qnumStr}__--__${i}`
+          const img = imageMap[key1] || imageMap[key2]
+          if (img) images.push(img)
           else break
         }
 
         const numOpts = parseInt(q.answerOptions) || 4
         questions.push({
           qnum: globalQnum,
-          subject: subj,
+          subject: normalizedSubj,   // always save normalized name for CBT nav
           type: q.type === 'mcq' ? 'MCQ' : 'INTEGER',
           text: `Q${globalQnum}`,
           opts: ['A','B','C','D'].slice(0, numOpts),
@@ -348,11 +381,11 @@ export default function AdminPage() {
                     <span className="result-ok-ic">✅</span>
                     <div>
                       <div className="result-ok-title">JSON Generated!</div>
-                      <div className="result-ok-sub">{result.questions} questions across {SUBJ_ORDER.filter(s=>result.testData.questions.some(q=>q.subject===s)).length} subjects</div>
+                      <div className="result-ok-sub">{result.questions} questions across {[...new Set(result.testData.questions.map(q=>q.subject))].length} subjects</div>
                     </div>
                   </div>
                   <div className="result-stats">
-                    {SUBJ_ORDER.map(s=>{
+                    {[...new Set(result.testData.questions.map(q=>q.subject))].map(s=>{
                       const count = result.testData.questions.filter(q=>q.subject===s).length
                       if (!count) return null
                       const withImg = result.testData.questions.filter(q=>q.subject===s&&q.images?.length>0).length
