@@ -50,14 +50,17 @@ export default function TestZyro() {
       const saved = localStorage.getItem(RESUME_KEY)
       if (saved) {
         const rd = JSON.parse(saved)
-        // Only show resume if it was saved less than 4 hours ago
-        if (rd && rd.savedAt && Date.now() - rd.savedAt < 4*60*60*1000) {
+        // Valid if: has questions, has config, saved less than 6 hours ago
+        if (rd && rd.Qs && rd.Qs.length > 0 && rd.cfg && rd.savedAt &&
+            Date.now() - rd.savedAt < 6*60*60*1000) {
           setResumeData(rd)
         } else {
           localStorage.removeItem(RESUME_KEY)
         }
       }
-    } catch(e) {}
+    } catch(e) {
+      localStorage.removeItem(RESUME_KEY)
+    }
     loadTree()
   }, [])
 
@@ -105,6 +108,13 @@ export default function TestZyro() {
     setCbtOn(true)
     startRef.current = Date.now()
     clearInterval(timerRef.current)
+    // Save immediately so resume is available right away
+    setTimeout(() => {
+      try {
+        const saveData = { cfg:c, Qs:qs, ans:blankAns, marked:new Array(qs.length).fill(false), visited:new Array(qs.length).fill(false), cur:0, elapsed:0, savedAt:Date.now() }
+        localStorage.setItem(RESUME_KEY, JSON.stringify(saveData))
+      } catch(e) {}
+    }, 500)
   }
 
   useEffect(() => {
@@ -116,29 +126,42 @@ export default function TestZyro() {
     return () => clearInterval(timerRef.current)
   }, [cbtOn, done])
 
-  // Auto-save progress every 10 seconds + on window close
+  // Keep refs in sync so saveProgress always has fresh data
+  const cbtStateRef = useRef({})
+  useEffect(() => {
+    cbtStateRef.current = { cbtOn, done, Qs, cfg, marked, visited, cur, secs }
+  })
+
+  // Save progress — uses ref so always fresh, no stale closure
   const saveProgress = useCallback(() => {
-    if (!cbtOn || done || !Qs.length) return
+    const s = cbtStateRef.current
+    if (!s.cbtOn || s.done || !s.Qs?.length) return
     try {
       const saveData = {
-        cfg, Qs, ans: cbtAns.current, marked, visited,
-        cur, secs: secs,
+        cfg: s.cfg,
+        Qs: s.Qs,
+        ans: cbtAns.current,
+        marked: s.marked,
+        visited: s.visited,
+        cur: s.cur,
         elapsed: Math.round((Date.now() - startRef.current) / 1000),
         savedAt: Date.now()
       }
       localStorage.setItem(RESUME_KEY, JSON.stringify(saveData))
     } catch(e) {}
-  }, [cbtOn, done, Qs, cfg, marked, visited, cur, secs])
+  }, []) // no deps — always reads from ref
 
+  // Register auto-save: every 10s + on window close
+  // Only set up once when CBT starts
   useEffect(() => {
     if (!cbtOn || done) return
-    const interval = setInterval(saveProgress, 10000) // every 10s
+    const interval = setInterval(saveProgress, 10000)
     window.addEventListener('beforeunload', saveProgress)
     return () => {
       clearInterval(interval)
       window.removeEventListener('beforeunload', saveProgress)
     }
-  }, [cbtOn, done, saveProgress])
+  }, [cbtOn, done]) // only cbtOn/done — saveProgress is stable
 
   const exitCBT = () => {
     if (!confirm('Exit? Progress is auto-saved — you can resume later.')) return
