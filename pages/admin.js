@@ -81,18 +81,20 @@ async function processBitsatZip(file, testName, onProgress) {
       return !DISPLAY_ORDER.includes(norm) && !DISPLAY_ORDER.includes(s)
     })
   ]
-  // Actually just use pcd keys directly in display order
+  // Actually just use pcd keys directly in display order — Bonus always last
   const finalOrder = [
     ...pcdSubjects.filter(s => ['Physics'].includes(s)),
     ...pcdSubjects.filter(s => ['Chemistry'].includes(s)),
     ...pcdSubjects.filter(s => ['Maths','Mathematics','Math'].includes(s)),
     ...pcdSubjects.filter(s => ['English & LR','English','English & Logical Reasoning'].includes(s)),
-    ...pcdSubjects.filter(s => !['Physics','Chemistry','Maths','Mathematics','Math','English & LR','English','English & Logical Reasoning'].includes(s)),
+    ...pcdSubjects.filter(s => !['Physics','Chemistry','Maths','Mathematics','Math','English & LR','English','English & Logical Reasoning','Bonus'].includes(s)),
+    ...pcdSubjects.filter(s => ['Bonus'].includes(s)), // Bonus always last
   ]
 
   for (const subj of finalOrder) {
     const subjData = pcd[subj]
-    const normalizedSubj = normalizeSubj(subj)  // e.g. Mathematics → Maths
+    const normalizedSubj = normalizeSubj(subj)
+    const isBonus = subj === 'Bonus' || normalizedSubj === 'Bonus'
 
     for (const [sectionName, sectionQs] of Object.entries(subjData)) {
       const ansSection = (ak[subj] || {})[sectionName] || {}
@@ -116,7 +118,8 @@ async function processBitsatZip(file, testName, onProgress) {
         const numOpts = parseInt(q.answerOptions) || 4
         questions.push({
           qnum: globalQnum,
-          subject: normalizedSubj,   // always save normalized name for CBT nav
+          subject: isBonus ? 'Bonus' : normalizedSubj,
+          isBonus: isBonus || undefined,
           type: q.type === 'mcq' ? 'MCQ' : 'INTEGER',
           text: `Q${globalQnum}`,
           opts: ['A','B','C','D'].slice(0, numOpts),
@@ -132,6 +135,8 @@ async function processBitsatZip(file, testName, onProgress) {
 
   if (!questions.length) throw new Error('No questions found. Check zip format.')
 
+  const bonusCount = questions.filter(q => q.isBonus).length
+
   return {
     id: 'bitsat_' + Date.now(),
     title: testName,
@@ -140,6 +145,7 @@ async function processBitsatZip(file, testName, onProgress) {
     mCor: 3,
     mNeg: 1,
     order: 999,
+    hasBonus: bonusCount > 0,
     questions
   }
 }
@@ -650,4 +656,22 @@ const PANEL = `
 /* Modal */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px}
 .modal{background:white;border-radius:18px;padding:28px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.25)}
+/* Bonus */
+.bonus-section{background:#fff8e1;border:1px solid #ffe082;border-radius:12px;padding:16px 18px;margin-bottom:16px}
+.bonus-toggle-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+.bonus-toggle-label{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.88rem;color:#5d4037;cursor:pointer}
+.bonus-toggle-label input{width:16px;height:16px;cursor:pointer;accent-color:#e65100}
+.bonus-note{font-size:.7rem;color:#888;font-style:italic}
+.bonus-body{margin-top:14px;display:flex;flex-direction:column;gap:12px}
+.bonus-zip-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.bonus-pick-btn{background:#e65100;color:white;border:none;padding:8px 16px;border-radius:7px;font-family:'Inter',sans-serif;font-weight:700;font-size:.78rem;cursor:pointer}
+.bonus-pick-btn:hover{background:#bf360c}
+.bonus-file-row{display:flex;align-items:center;gap:8px}
+.bonus-file-name{font-size:.78rem;color:#333;font-weight:600}
+.bonus-remove{background:none;border:1px solid #ccc;border-radius:4px;padding:2px 8px;cursor:pointer;color:#999;font-size:.75rem}
+.bonus-count-row{display:flex;align-items:center;gap:10px}
+.bonus-ans-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
+.bonus-ans-cell{display:flex;align-items:center;gap:5px;background:white;border:1px solid #ffe082;border-radius:6px;padding:5px 8px}
+.bonus-ans-num{font-size:.65rem;font-weight:800;color:#e65100;font-family:monospace;min-width:22px}
+.bonus-ans-sel{border:none;background:transparent;font-family:'Inter',sans-serif;font-size:.82rem;font-weight:700;color:#1a237e;cursor:pointer;outline:none;padding:0}
 `
